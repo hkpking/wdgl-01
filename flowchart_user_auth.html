@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>用户注册登录流程图</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default" });
+  </script>
+  <style>
+    body {
+      font-family: "Segoe UI", "PingFang SC", sans-serif;
+      background: #f5f7fb;
+      margin: 0;
+      padding: 24px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(29, 88, 255, 0.12);
+    }
+    h1 {
+      margin-top: 0;
+      color: #0d3c78;
+      font-weight: 600;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-all;
+      background: #f0f4ff;
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>用户注册至登录完整流程图</h1>
+    <div class="mermaid">
+flowchart TD
+
+    %% 样式定义
+    classDef userNode fill:#F2F8FF,stroke:#3B7DDD,stroke-width:1.5px,color:#0D3C78;
+    classDef systemNode fill:#F9F9F9,stroke:#9C9C9C,stroke-width:1.2px,color:#2B2B2B;
+    classDef securityNode fill:#FFF4E5,stroke:#FF9F1C,stroke-width:1.5px,color:#A35B00;
+    classDef decision stroke-dasharray: 5 5;
+    classDef terminate fill:#FFE5E5,stroke:#E74646,color:#8C1C1C;
+    classDef success fill:#E8FFF4,stroke:#23A55B,color:#167941;
+
+    %% 统一出口
+    END_TERMINATE[流程终止]:::terminate
+    END_SUCCESS[登录成功，进入受保护页面]:::success
+
+    %% 入口
+    subgraph LANE_USER[用户]
+        direction TB
+        U0[访客进入注册/登录入口]:::userNode --> D0{已有账号?}:::decision
+        D0 -- 否 --> U_REG_START[选择注册]:::userNode
+        D0 -- 是 --> U_LOGIN_START[进入登录流程]:::userNode
+        U0 --> U_FORGOT[选择“忘记密码”]:::userNode
+    end
+
+    %% 注册流程泳道
+    subgraph LANE_REG[注册流程（用户 + 系统）]
+        direction TB
+        U_REG_START --> REG1[填写手机号/邮箱 + 密码 + 勾选协议]:::userNode
+        REG1 --> REG2{格式校验通过?}:::decision
+        REG2 -- 否 --> REG3[提示错误并返回修改]:::systemNode --> REG1
+        REG2 -- 是 --> REG4[风控风险评估]:::securityNode
+        REG4 -- 高风险 --> REG_FAIL[显示高风险提示]:::systemNode --> END_TERMINATE
+        REG4 -- 通过 --> REG5[发送验证码并记录次数]:::systemNode
+        REG5 --> REG6[输入验证码]:::userNode
+        REG6 --> REG7{验证码有效?}:::decision
+        REG7 -- 否 --> REG8[提示重试/重新发送]:::systemNode --> REG5
+        REG7 -- 是 --> REG9[写入用户资料\n状态=已注册未登录]:::systemNode
+        REG9 --> REG10[生成初始认证令牌]:::systemNode
+        REG10 --> REG_DONE[注册成功，引导登录入口]:::systemNode
+    end
+
+    REG_DONE --> U_LOGIN_START
+
+    %% 登录流程泳道
+    subgraph LANE_LOGIN[登录流程（用户 + 系统 + 风控）]
+        direction TB
+        U_LOGIN_START --> L1[输入账号 + 密码]:::userNode
+        L1 --> L2{账号存在且未禁用?}:::decision
+        L2 -- 否 --> L3[提示账号不存在或被禁用]:::systemNode --> END_TERMINATE
+        L2 -- 是 --> L4{密码校验通过?}:::decision
+        L4 -- 否 --> L5[记录失败次数\n超阈触发验证码/锁定]:::securityNode --> L1
+        L4 -- 是 --> L6{首次登录或资料缺失?}:::decision
+
+        %% 首次补资料
+        L6 -- 是 --> F1[补充昵称/地区等必填项]:::userNode
+        F1 --> F2{校验通过?}:::decision
+        F2 -- 否 --> F3[提示修改并返回填写]:::systemNode --> F1
+        F2 -- 是 --> F4[更新资料，状态=已认证]:::systemNode --> L7
+
+        %% 常规登录处理
+        L6 -- 否 --> L7[登录成功处理入口]:::systemNode
+        L7 --> L8[记录登录日志（时间/IP/设备）]:::systemNode
+        L8 --> L9[风控策略检查]:::securityNode
+        L9 -- 高风险 --> L10[触发二次验证]:::securityNode
+        L10 --> L11{二次验证通过?}:::decision
+        L11 -- 否 --> L12[拦截登录并提示重试]:::systemNode --> L1
+        L11 -- 是 --> L13[生成会话令牌 + 刷新令牌]:::systemNode
+        L9 -- 通过 --> L13
+        L13 --> L14[更新最后登录时间/IP/设备信息]:::systemNode
+        L14 --> END_SUCCESS
+    end
+
+    %% 忘记密码泳道
+    subgraph LANE_RESET[密码找回流程]
+        direction TB
+        U_FORGOT --> R1[输入手机号/邮箱]:::userNode
+        R1 --> R2{账号存在?}:::decision
+        R2 -- 否 --> R3[提示账号不存在]:::systemNode --> END_TERMINATE
+        R2 -- 是 --> R4[发送重置验证码或邮件链接]:::systemNode
+        R4 --> R5[用户输入验证码/点击链接]:::userNode
+        R5 --> R6{验证通过?}:::decision
+        R6 -- 否 --> R7[提示重新验证]:::systemNode --> R4
+        R6 -- 是 --> R8[设置新密码\n校验复杂度/历史密码]:::userNode
+        R8 --> R9[更新密码哈希\n记录操作日志]:::systemNode
+        R9 --> R10[可选：下线全部会话]:::systemNode
+        R10 --> R11[密码重置完成提示]:::systemNode
+    end
+
+    R11 --> U_LOGIN_START
+    REG_FAIL --> END_TERMINATE
+  </div>
+</body>
+</html>

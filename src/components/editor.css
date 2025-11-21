@@ -1,0 +1,207 @@
+/* Rich Text Editor Styles */
+
+.rich-text-editor {
+    @apply bg-white rounded-lg shadow-sm;
+}
+
+.editor-content {
+    @apply p-8 min-h-[400px];
+}
+
+/* ProseMirror Base Styles */
+.ProseMirror {
+    @apply outline-none min-h-[400px];
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    @apply text-gray-400 float-left h-0 pointer-events-none;
+}
+
+/* Headings */
+.ProseMirror h1 {
+    @apply text-4xl font-bold mt-6 mb-4 text-gray-900;
+}
+
+.ProseMirror h2 {
+    @apply text-3xl font-bold mt-5 mb-3 text-gray-900;
+}
+
+.ProseMirror h3 {
+    @apply text-2xl font-bold mt-4 mb-3 text-gray-900;
+}
+
+.ProseMirror h4 {
+    @apply text-xl font-bold mt-3 mb-2 text-gray-900;
+}
+
+.ProseMirror h5 {
+    @apply text-lg font-bold mt-3 mb-2 text-gray-900;
+}
+
+.ProseMirror h6 {
+    @apply text-base font-bold mt-2 mb-2 text-gray-900;
+}
+
+/* Paragraphs */
+.ProseMirror p {
+    @apply my-3 text-gray-800 leading-relaxed;
+}
+
+/* Lists */
+.ProseMirror ul,
+.ProseMirror ol {
+    @apply pl-6 my-3;
+}
+
+.ProseMirror ul {
+    @apply list-disc;
+}
+
+.ProseMirror ol {
+    @apply list-decimal;
+}
+
+.ProseMirror li {
+    @apply my-1;
+}
+
+.ProseMirror li p {
+    @apply my-0;
+}
+
+/* Task List */
+.ProseMirror ul[data-type="taskList"] {
+    @apply list-none pl-0;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+    @apply flex items-start gap-2;
+}
+
+.ProseMirror ul[data-type="taskList"] li>label {
+    @apply flex-shrink-0 mt-1;
+}
+
+.ProseMirror ul[data-type="taskList"] li>div {
+    @apply flex-1;
+}
+
+.ProseMirror ul[data-type="taskList"] input[type="checkbox"] {
+    @apply w-4 h-4 cursor-pointer;
+}
+
+/* Blockquote */
+.ProseMirror blockquote {
+    @apply border-l-4 border-gray-300 pl-4 py-2 my-4 text-gray-700 italic bg-gray-50;
+}
+
+/* Code */
+.ProseMirror code {
+    @apply bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.ProseMirror pre {
+    @apply bg-gray-900 text-gray-100 p-4 rounded-lg my-4 overflow-x-auto;
+}
+
+.ProseMirror pre code {
+    @apply bg-transparent text-gray-100 p-0;
+}
+
+/* Horizontal Rule */
+.ProseMirror hr {
+    @apply my-6 border-t-2 border-gray-300;
+}
+
+/* Links */
+.ProseMirror a {
+    @apply text-blue-600 underline hover:text-blue-800 cursor-pointer;
+}
+
+/* Images */
+.ProseMirror img {
+    @apply max-w-full h-auto rounded-lg my-4;
+}
+
+/* Tables */
+.ProseMirror table {
+    @apply border-collapse w-full my-4;
+    table-layout: fixed;
+    overflow: hidden;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+    @apply border border-gray-300 px-3 py-2 text-left;
+    min-width: 1em;
+    vertical-align: top;
+    box-sizing: border-box;
+    position: relative;
+}
+
+.ProseMirror th {
+    @apply bg-gray-100 font-semibold;
+}
+
+.ProseMirror td {
+    @apply bg-white;
+}
+
+/* Column resize handle */
+.ProseMirror .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: -2px;
+    width: 4px;
+    background-color: #3b82f6;
+    pointer-events: none;
+}
+
+.ProseMirror.resize-cursor {
+    cursor: col-resize;
+}
+
+/* Selected cell */
+.ProseMirror .selectedCell:after {
+    z-index: 2;
+    position: absolute;
+    content: "";
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background: rgba(59, 130, 246, 0.1);
+    pointer-events: none;
+}
+
+/* Selection */
+.ProseMirror ::selection {
+    @apply bg-blue-200;
+}
+
+/* Focus */
+.ProseMirror:focus {
+    @apply outline-none;
+}
+
+/* Menu Bar */
+.menu-bar {
+    @apply shadow-sm;
+}
+
+.menu-bar button:disabled {
+    @apply cursor-not-allowed opacity-30;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .editor-content {
+        @apply p-4;
+    }
+
+    .menu-bar {
+        @apply overflow-x-auto;
+    }
+}
