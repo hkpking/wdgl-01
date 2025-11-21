@@ -3,15 +3,31 @@ import {
     Bold, Italic, Strikethrough, Code, List, ListOrdered, CheckSquare,
     Quote, SquareCode, Undo, Redo, Link as LinkIcon, Image as ImageIcon,
     Type, ChevronDown, Heading1, Heading2, Heading3, Minus,
-    Table as TableIcon, Plus, MoreHorizontal
+    Table as TableIcon, Plus, MoreHorizontal,
+    AlignLeft, AlignCenter, AlignRight, AlignJustify,
+    Highlighter, Palette, Baseline
 } from 'lucide-react';
 import { uploadImage } from '../utils/editor';
 import * as mockStorage from '../services/mockStorage';
+
+const COLORS = [
+    '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3', '#ffffff',
+    '#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff', '#9900ff', '#ff00ff',
+    '#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3', '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc',
+    '#dd7e6b', '#ea9999', '#f9cb9c', '#ffe599', '#b6d7a8', '#a2c4c9', '#a4c2f4', '#9fc5e8', '#b4a7d6', '#d5a6bd',
+    '#cc4125', '#e06666', '#f6b26b', '#ffd966', '#93c47d', '#76a5af', '#6d9eeb', '#6fa8dc', '#8e7cc3', '#c27ba0',
+    '#a61c00', '#cc0000', '#e69138', '#f1c232', '#6aa84f', '#45818e', '#3c78d8', '#3d85c6', '#674ea7', '#a64d79',
+    '#85200c', '#990000', '#b45f06', '#bf9000', '#38761d', '#134f5c', '#1155cc', '#0b5394', '#351c75', '#741b47',
+    '#5b0f00', '#660000', '#783f04', '#7f6000', '#274e13', '#0c343d', '#1c4587', '#073763', '#20124d', '#4c1130'
+];
 
 export default function MenuBar({ editor }) {
     const [showHeadingMenu, setShowHeadingMenu] = useState(false);
     const [showFontFamilyMenu, setShowFontFamilyMenu] = useState(false);
     const [showFontSizeMenu, setShowFontSizeMenu] = useState(false);
+    const [showLineHeightMenu, setShowLineHeightMenu] = useState(false);
+    const [showColorMenu, setShowColorMenu] = useState(false);
+    const [showHighlightMenu, setShowHighlightMenu] = useState(false);
     const [showLinkInput, setShowLinkInput] = useState(false);
     const [linkUrl, setLinkUrl] = useState('');
     const [uploading, setUploading] = useState(false);
@@ -25,6 +41,11 @@ export default function MenuBar({ editor }) {
     const insertMenuRef = useRef(null);
     const fontFamilyMenuRef = useRef(null);
     const fontSizeMenuRef = useRef(null);
+    const lineHeightMenuRef = useRef(null);
+    const colorMenuRef = useRef(null);
+    const highlightMenuRef = useRef(null);
+    const colorInputRef = useRef(null);
+    const highlightInputRef = useRef(null);
     const currentUser = mockStorage.getCurrentUser();
 
     // Close menu when clicking outside
@@ -39,6 +60,15 @@ export default function MenuBar({ editor }) {
             }
             if (fontSizeMenuRef.current && !fontSizeMenuRef.current.contains(event.target)) {
                 setShowFontSizeMenu(false);
+            }
+            if (lineHeightMenuRef.current && !lineHeightMenuRef.current.contains(event.target)) {
+                setShowLineHeightMenu(false);
+            }
+            if (colorMenuRef.current && !colorMenuRef.current.contains(event.target)) {
+                setShowColorMenu(false);
+            }
+            if (highlightMenuRef.current && !highlightMenuRef.current.contains(event.target)) {
+                setShowHighlightMenu(false);
             }
             if (showHeadingMenu && !event.target.closest('button[title="标题"]')) {
                 setShowHeadingMenu(false);
@@ -253,6 +283,213 @@ export default function MenuBar({ editor }) {
                 >
                     <Code size={18} />
                 </Button>
+            </div>
+
+            {/* Colors & Highlight */}
+            <div className="flex gap-1 border-r border-gray-300 pr-2">
+                {/* Text Color */}
+                <div className="relative" ref={colorMenuRef}>
+                    <Button
+                        onClick={() => setShowColorMenu(!showColorMenu)}
+                        title="文字颜色"
+                        className={editor.getAttributes('textStyle').color ? 'text-blue-600' : ''}
+                    >
+                        <Palette size={18} />
+                        <div
+                            className="absolute bottom-1 right-1 w-2 h-2 rounded-full border border-gray-300"
+                            style={{ backgroundColor: editor.getAttributes('textStyle').color || '#000000' }}
+                        />
+                    </Button>
+
+                    {showColorMenu && (
+                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg p-2 z-20 w-64">
+                            <div className="mb-2 pb-2 border-b border-gray-100">
+                                <button
+                                    onClick={() => {
+                                        editor.chain().focus().unsetColor().run();
+                                        setShowColorMenu(false);
+                                    }}
+                                    className="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 rounded flex items-center gap-2"
+                                >
+                                    <div className="w-4 h-4 rounded border border-gray-300 flex items-center justify-center text-xs">A</div>
+                                    <span>默认颜色 (黑色)</span>
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-10 gap-1 mb-2">
+                                {COLORS.map((color) => (
+                                    <button
+                                        key={color}
+                                        onClick={() => {
+                                            editor.chain().focus().setColor(color).run();
+                                            setShowColorMenu(false);
+                                        }}
+                                        className="w-5 h-5 rounded-sm border border-gray-200 hover:scale-110 transition-transform"
+                                        style={{ backgroundColor: color }}
+                                        title={color}
+                                    />
+                                ))}
+                            </div>
+
+                            <div className="pt-2 border-t border-gray-100">
+                                <button
+                                    onClick={() => {
+                                        colorInputRef.current?.click();
+                                        setShowColorMenu(false);
+                                    }}
+                                    className="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 rounded flex items-center gap-2"
+                                >
+                                    <div className="w-4 h-4 rounded-full bg-gradient-to-br from-red-500 via-green-500 to-blue-500"></div>
+                                    <span>自定义颜色...</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <input
+                        ref={colorInputRef}
+                        type="color"
+                        className="hidden"
+                        onInput={(e) => editor.chain().focus().setColor(e.target.value).run()}
+                        value={editor.getAttributes('textStyle').color || '#000000'}
+                    />
+                </div>
+
+                {/* Highlight Color */}
+                <div className="relative" ref={highlightMenuRef}>
+                    <Button
+                        onClick={() => setShowHighlightMenu(!showHighlightMenu)}
+                        title="背景高亮"
+                        isActive={editor.isActive('highlight')}
+                    >
+                        <Highlighter size={18} />
+                        <div
+                            className="absolute bottom-1 right-1 w-2 h-2 rounded-full border border-gray-300"
+                            style={{ backgroundColor: editor.getAttributes('highlight').color || 'transparent' }}
+                        />
+                    </Button>
+
+                    {showHighlightMenu && (
+                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg p-2 z-20 w-64">
+                            <div className="mb-2 pb-2 border-b border-gray-100">
+                                <button
+                                    onClick={() => {
+                                        editor.chain().focus().unsetHighlight().run();
+                                        setShowHighlightMenu(false);
+                                    }}
+                                    className="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 rounded flex items-center gap-2"
+                                >
+                                    <div className="w-4 h-4 rounded border border-gray-300 bg-white text-gray-400 flex items-center justify-center text-xs">/</div>
+                                    <span>无背景色</span>
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-10 gap-1 mb-2">
+                                {COLORS.map((color) => (
+                                    <button
+                                        key={color}
+                                        onClick={() => {
+                                            editor.chain().focus().toggleHighlight({ color }).run();
+                                            setShowHighlightMenu(false);
+                                        }}
+                                        className="w-5 h-5 rounded-sm border border-gray-200 hover:scale-110 transition-transform"
+                                        style={{ backgroundColor: color }}
+                                        title={color}
+                                    />
+                                ))}
+                            </div>
+
+                            <div className="pt-2 border-t border-gray-100">
+                                <button
+                                    onClick={() => {
+                                        highlightInputRef.current?.click();
+                                        setShowHighlightMenu(false);
+                                    }}
+                                    className="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 rounded flex items-center gap-2"
+                                >
+                                    <div className="w-4 h-4 rounded-full bg-gradient-to-br from-red-500 via-green-500 to-blue-500"></div>
+                                    <span>自定义颜色...</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <input
+                        ref={highlightInputRef}
+                        type="color"
+                        className="hidden"
+                        onInput={(e) => editor.chain().focus().toggleHighlight({ color: e.target.value }).run()}
+                        value={editor.getAttributes('highlight').color || '#ffff00'}
+                    />
+                </div>
+            </div>
+
+            {/* Alignment */}
+            <div className="flex gap-1 border-r border-gray-300 pr-2">
+                <Button
+                    onClick={() => editor.chain().focus().setTextAlign('left').run()}
+                    isActive={editor.isActive({ textAlign: 'left' })}
+                    title="左对齐"
+                >
+                    <AlignLeft size={18} />
+                </Button>
+                <Button
+                    onClick={() => editor.chain().focus().setTextAlign('center').run()}
+                    isActive={editor.isActive({ textAlign: 'center' })}
+                    title="居中对齐"
+                >
+                    <AlignCenter size={18} />
+                </Button>
+                <Button
+                    onClick={() => editor.chain().focus().setTextAlign('right').run()}
+                    isActive={editor.isActive({ textAlign: 'right' })}
+                    title="右对齐"
+                >
+                    <AlignRight size={18} />
+                </Button>
+                <Button
+                    onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+                    isActive={editor.isActive({ textAlign: 'justify' })}
+                    title="两端对齐"
+                >
+                    <AlignJustify size={18} />
+                </Button>
+            </div>
+
+            {/* Line Height */}
+            <div className="flex gap-1 border-r border-gray-300 pr-2 relative" ref={lineHeightMenuRef}>
+                <Button
+                    onClick={() => setShowLineHeightMenu(!showLineHeightMenu)}
+                    title="行高"
+                    className="w-16 justify-between flex items-center"
+                >
+                    <Baseline size={18} />
+                    <ChevronDown size={12} />
+                </Button>
+                {showLineHeightMenu && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg p-1 flex flex-col gap-1 z-20 min-w-[80px]">
+                        {[
+                            { name: '1.0', value: '1.0' },
+                            { name: '1.15', value: '1.15' },
+                            { name: '1.5', value: '1.5' },
+                            { name: '2.0', value: '2.0' },
+                            { name: '2.5', value: '2.5' },
+                            { name: '3.0', value: '3.0' },
+                        ].map((lh) => (
+                            <button
+                                key={lh.name}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                    editor.chain().focus().setLineHeight(lh.value).run();
+                                    setShowLineHeightMenu(false);
+                                }}
+                                className={`flex items-center gap-2 p-2 hover:bg-gray-100 rounded text-left text-sm ${editor.isActive({ lineHeight: lh.value }) ? 'bg-gray-100' : ''}`}
+                            >
+                                {lh.name}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Headings */}
@@ -538,6 +775,6 @@ export default function MenuBar({ editor }) {
             </div>
 
 
-        </div>
+        </div >
     );
 }

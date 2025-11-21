@@ -13,6 +13,10 @@ import TableCell from '@tiptap/extension-table-cell';
 import TextStyle from '@tiptap/extension-text-style';
 import FontFamily from '@tiptap/extension-font-family';
 import { FontSize } from '../extensions/FontSize';
+import { LineHeight } from '../extensions/LineHeight';
+import TextAlign from '@tiptap/extension-text-align';
+import { Color } from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
 import Flowchart from '../extensions/FlowchartExtension';
 import MenuBar from './MenuBar';
 import TableContextMenu from './TableContextMenu';
@@ -59,6 +63,12 @@ export default function RichTextEditor({ content, onChange, placeholder = 'å¼€å§
             TextStyle,
             FontFamily,
             FontSize,
+            LineHeight,
+            TextAlign.configure({
+                types: ['heading', 'paragraph'],
+            }),
+            Color,
+            Highlight.configure({ multicolor: true }),
             Flowchart,
         ],
         content,
