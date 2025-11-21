@@ -6,7 +6,7 @@ import {
     Table as TableIcon, Plus, MoreHorizontal
 } from 'lucide-react';
 import { uploadImage } from '../utils/editor';
-import { useAuth } from '../contexts/AuthContext';
+import * as mockStorage from '../services/mockStorage';
 
 export default function MenuBar({ editor }) {
     const [showHeadingMenu, setShowHeadingMenu] = useState(false);
@@ -25,7 +25,7 @@ export default function MenuBar({ editor }) {
     const insertMenuRef = useRef(null);
     const fontFamilyMenuRef = useRef(null);
     const fontSizeMenuRef = useRef(null);
-    const { currentUser } = useAuth();
+    const currentUser = mockStorage.getCurrentUser();
 
     // Close menu when clicking outside
     useEffect(() => {

@@ -1,23 +1,21 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import Login from './pages/Login';
+// Mock 模式下暂时不使用认证
+// import { AuthProvider } from './contexts/AuthContext';
+// import PrivateRoute from './components/PrivateRoute';
 import Dashboard from './pages/Dashboard';
 import Editor from './pages/Editor';
-import PrivateRoute from './components/PrivateRoute';
 
 function App() {
     return (
-        <AuthProvider>
-            <Router>
-                <Routes>
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-                    <Route path="/editor/:id?" element={<PrivateRoute><Editor /></PrivateRoute>} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-            </Router>
-        </AuthProvider>
+        <Router>
+            <Routes>
+                {/* Mock 模式下直接访问,不需要登录 */}
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/editor/:id?" element={<Editor />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+        </Router>
     );
 }
 

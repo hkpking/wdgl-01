@@ -1,63 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, query, onSnapshot, deleteDoc, doc, orderBy } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
-import { db, auth } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
-import { Plus, Search, LogOut, FileText, Trash2, Edit } from 'lucide-react';
+import { Plus, Search, LogOut, Trash2, Edit } from 'lucide-react';
+import { getTextContent } from '../utils/editor';
+import * as mockStorage from '../services/mockStorage';
 
 export default function Dashboard() {
     const [documents, setDocuments] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [deleteId, setDeleteId] = useState(null);
-    const { currentUser } = useAuth();
+
+    // 使用 mock 用户
+    const currentUser = mockStorage.getCurrentUser();
     const navigate = useNavigate();
 
-    useEffect(() => {
+    // 加载文档列表(提取为单独函数以便复用)
+    const loadDocuments = () => {
         if (!currentUser) return;
 
-        const collectionPath = `artifacts/1:354969438898:web:3fe49633eb0cedafabd7ab/users/${currentUser.uid}/documents`;
-        const q = query(collection(db, collectionPath)); // Client-side sorting for simplicity or add orderBy if index exists
+        console.log('[DASHBOARD] Loading documents for user:', currentUser.uid);
+        const docs = mockStorage.getAllDocuments(currentUser.uid);
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const docs = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            // Sort by updatedAt desc
-            docs.sort((a, b) => {
-                const timeA = a.updatedAt?.toMillis() || a.createdAt?.toMillis() || 0;
-                const timeB = b.updatedAt?.toMillis() || b.createdAt?.toMillis() || 0;
-                return timeB - timeA;
-            });
-            setDocuments(docs);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching documents:", error);
-            setLoading(false);
+        // 按更新时间排序
+        docs.sort((a, b) => {
+            const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+            const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+            return timeB - timeA;
         });
 
-        return unsubscribe;
-    }, [currentUser]);
+        console.log('[DASHBOARD] Loaded documents:', docs.length);
+        setDocuments(docs);
+        setLoading(false);
+    };
 
-    const handleLogout = async () => {
-        try {
-            await signOut(auth);
+    useEffect(() => {
+        loadDocuments();
+        // 移除自动刷新定时器 - localStorage 不需要轮询
+        // TODO: 迁移到后端后,考虑使用 WebSocket 或 Server-Sent Events 进行实时更新
+    }, []); // 只在组件挂载时加载一次
+
+    const handleLogout = () => {
+        // Mock 登出 - 可以清除数据或跳转到登录页
+        if (window.confirm('确定要退出吗?')) {
             navigate('/login');
-        } catch (error) {
-            console.error("Failed to log out", error);
         }
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!deleteId || !currentUser) return;
         try {
-            const docRef = doc(db, `artifacts/1:354969438898:web:3fe49633eb0cedafabd7ab/users/${currentUser.uid}/documents`, deleteId);
-            await deleteDoc(docRef);
+            console.log('[DASHBOARD] Deleting document:', deleteId);
+            mockStorage.deleteDocument(currentUser.uid, deleteId);
             setDeleteId(null);
+
+            // 刷新列表
+            loadDocuments();
         } catch (error) {
-            console.error("Error deleting document:", error);
+            console.error('[DASHBOARD] Error deleting document:', error);
             alert("删除失败");
         }
     };
@@ -71,13 +70,16 @@ export default function Dashboard() {
             <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold text-gray-900">我的仪表盘</h1>
-                    <button
-                        onClick={handleLogout}
-                        className="flex items-center gap-2 text-gray-500 hover:text-gray-800 transition"
-                    >
-                        <LogOut size={18} />
-                        退出登录
-                    </button>
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm text-gray-500">{currentUser?.email || '演示模式'}</span>
+                        <button
+                            onClick={handleLogout}
+                            className="flex items-center gap-2 text-gray-500 hover:text-gray-800 transition"
+                        >
+                            <LogOut size={18} />
+                            退出
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex flex-col md:flex-row gap-4 mb-8">
@@ -105,20 +107,23 @@ export default function Dashboard() {
                         <p className="text-center text-gray-500">加载中...</p>
                     ) : filteredDocs.length === 0 ? (
                         <div className="text-center py-10 text-gray-500">
-                            {searchTerm ? '未找到匹配的文档' : '还没有文档，点击上方按钮创建第一个文档'}
+                            {searchTerm ? '未找到匹配的文档' : '还没有文档,点击上方按钮创建第一个文档'}
                         </div>
                     ) : (
                         filteredDocs.map(doc => (
                             <div key={doc.id} className="p-4 bg-gray-50 border border-gray-200 rounded-lg hover:shadow-md transition">
                                 <div className="flex justify-between items-start">
-                                    <div>
+                                    <div className="flex-1">
                                         <h3 className="font-semibold text-lg text-blue-700 mb-1">{doc.title || '无标题文档'}</h3>
-                                        <p className="text-sm text-gray-600 line-clamp-2">{doc.content}</p>
+                                        <p className="text-sm text-gray-600 line-clamp-2">
+                                            {getTextContent(doc.content || '').substring(0, 100) || '无内容...'}
+                                        </p>
                                         <p className="text-xs text-gray-400 mt-2">
-                                            {doc.updatedAt ? '更新于: ' + doc.updatedAt.toDate().toLocaleString('zh-CN') : '创建于: ' + doc.createdAt?.toDate().toLocaleString('zh-CN')}
+                                            {doc.updatedAt ? '更新于: ' + new Date(doc.updatedAt).toLocaleString('zh-CN') :
+                                                (doc.createdAt ? '创建于: ' + new Date(doc.createdAt).toLocaleString('zh-CN') : '')}
                                         </p>
                                     </div>
-                                    <div className="flex gap-3">
+                                    <div className="flex gap-3 ml-4">
                                         <Link
                                             to={`/editor/${doc.id}`}
                                             className="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition"
@@ -146,7 +151,7 @@ export default function Dashboard() {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
                         <h3 className="text-lg font-bold text-gray-900">确认删除</h3>
-                        <p className="my-4 text-gray-600">您确定要删除这个文档吗？此操作无法撤销。</p>
+                        <p className="my-4 text-gray-600">您确定要删除这个文档吗?此操作无法撤销。</p>
                         <div className="flex justify-end gap-4 mt-6">
                             <button
                                 onClick={() => setDeleteId(null)}

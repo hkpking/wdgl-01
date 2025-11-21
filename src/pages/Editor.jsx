@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, Save, Clock, RotateCcw } from 'lucide-react';
 import RichTextEditor from '../components/RichTextEditor';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { getTextContent, isPlainText, plainTextToHtml } from '../utils/editor';
+import * as mockStorage from '../services/mockStorage';
 
 export default function Editor() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { currentUser } = useAuth();
+
+    // 使用 mock 用户
+    const currentUser = mockStorage.getCurrentUser();
 
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
@@ -21,111 +21,126 @@ export default function Editor() {
     const [showHistory, setShowHistory] = useState(false);
     const [versions, setVersions] = useState([]);
     const [lastSavedContent, setLastSavedContent] = useState('');
+    const [confirmingVersionId, setConfirmingVersionId] = useState(null);
 
     // Load document if ID exists
     useEffect(() => {
         if (!id || !currentUser) return;
 
-        const loadDoc = async () => {
-            const docRef = doc(db, `artifacts/1:354969438898:web:3fe49633eb0cedafabd7ab/users/${currentUser.uid}/documents`, id);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setTitle(data.title || '');
+        const loadDoc = () => {
+            console.log('[LOAD] Loading document:', id);
+            const doc = mockStorage.getDocument(currentUser.uid, id);
+
+            if (doc) {
+                console.log('[LOAD] Document found:', doc);
+                setTitle(doc.title || '');
 
                 // Handle both HTML and plain text formats
-                let loadedContent = data.content || '';
+                let loadedContent = doc.content || '';
                 if (isPlainText(loadedContent)) {
-                    // Convert old plain text to HTML
                     loadedContent = plainTextToHtml(loadedContent);
                 }
                 setContent(loadedContent);
-                setLastSavedContent(loadedContent); // Initialize last saved content
-                setLastSaved(data.updatedAt?.toDate() || data.createdAt?.toDate());
+                setLastSavedContent(loadedContent);
+                setLastSaved(doc.updatedAt ? new Date(doc.updatedAt) : (doc.createdAt ? new Date(doc.createdAt) : null));
             } else {
+                console.log('[LOAD] Document not found, redirecting to home');
                 navigate('/');
             }
         };
+
         loadDoc();
-    }, [id, currentUser, navigate]);
+    }, [id]); // 只依赖 id,避免循环
 
     // Update word count
     useEffect(() => {
-        // Extract plain text from HTML for accurate word count
         const plainText = getTextContent(content);
         setWordCount(plainText.length);
     }, [content]);
 
     const saveDocument = useCallback(async (silent = false) => {
-        if (!title && !content) return;
-        if (!currentUser) return;
+        console.log('[SAVE] Starting save process...', { title, contentLength: content?.length, id, silent });
 
+        if (!title && !content) {
+            console.log('[SAVE] Aborted: No title and no content');
+            return;
+        }
+
+        if (!currentUser) {
+            console.error('[SAVE] Aborted: No current user - user not logged in!');
+            alert('请先登录后再保存文档');
+            return;
+        }
+
+        console.log('[SAVE] Current user:', currentUser.uid);
+        console.log('[SAVE] Setting saving state to true');
         setSaving(true);
+
         try {
             const docData = {
                 title,
                 content,
-                contentType: 'html', // Mark as HTML format
-                updatedAt: serverTimestamp()
+                contentType: 'html'
             };
 
             if (id) {
-                // Update existing
-                const docRef = doc(db, `artifacts/1:354969438898:web:3fe49633eb0cedafabd7ab/users/${currentUser.uid}/documents`, id);
+                // Update existing document
+                console.log('[SAVE] Updating existing document with ID:', id);
 
-                // Save version before update (simplified versioning)
-                // In a real app, you might want to check if content actually changed significantly
-                const versionsRef = collection(docRef, 'versions');
-                await addDoc(versionsRef, {
-                    title,
-                    content,
-                    savedAt: serverTimestamp()
-                });
+                // Save version before update
+                console.log('[SAVE] Creating version backup...');
+                mockStorage.saveVersion(currentUser.uid, id, { title, content });
+                console.log('[SAVE] Version backup created');
 
-                await updateDoc(docRef, docData);
+                console.log('[SAVE] Updating document...');
+                mockStorage.saveDocument(currentUser.uid, id, docData);
+                console.log('[SAVE] Document updated successfully');
             } else {
-                // Create new
-                const collectionRef = collection(db, `artifacts/1:354969438898:web:3fe49633eb0cedafabd7ab/users/${currentUser.uid}/documents`);
-                const newDocRef = await addDoc(collectionRef, {
-                    ...docData,
-                    createdAt: serverTimestamp()
-                });
+                // Create new document
+                console.log('[SAVE] Creating new document...');
+                const savedDoc = mockStorage.saveDocument(currentUser.uid, null, docData);
+                console.log('[SAVE] New document created with ID:', savedDoc.id);
 
                 // Create initial version
-                const versionsRef = collection(newDocRef, 'versions');
-                await addDoc(versionsRef, {
-                    title,
-                    content,
-                    savedAt: serverTimestamp()
-                });
+                console.log('[SAVE] Creating initial version...');
+                mockStorage.saveVersion(currentUser.uid, savedDoc.id, { title, content });
+                console.log('[SAVE] Initial version created');
 
-                navigate(`/editor/${newDocRef.id}`, { replace: true });
+                // Navigate to the new document URL
+                console.log('[SAVE] Navigating to new document...');
+                navigate(`/editor/${savedDoc.id}`, { replace: true });
             }
 
-            setLastSaved(new Date());
-            setLastSavedContent(content); // Update last saved content
             if (!silent) {
-                // Optional: Show success toast
+                console.log('[SAVE] Save completed successfully');
             }
         } catch (error) {
-            console.error("Save failed:", error);
-            alert("保存失败");
+            console.error('[SAVE] Save failed:', error);
+            alert("保存失败: " + error.message);
         } finally {
+            console.log('[SAVE] Entering finally block');
+            console.log('[SAVE] Setting saving state to false');
             setSaving(false);
+
+            const now = new Date();
+            console.log('[SAVE] Updating lastSaved to:', now);
+            setLastSaved(now);
+            console.log('[SAVE] Updating lastSavedContent');
+            setLastSavedContent(content);
+            console.log('[SAVE] Save process completed');
         }
     }, [title, content, id, currentUser, navigate]);
 
     // Auto-save every 5 seconds if content changed
     useEffect(() => {
-        if (!id || !title && !content) return; // Only auto-save existing docs with content
+        if (!id || (!title && !content)) return;
 
-        // Check if content actually changed
         const contentChanged = content !== lastSavedContent;
         if (!contentChanged) return;
 
         const timer = setTimeout(() => {
             saveDocument(true); // Silent save
-        }, 5000); // 5 second debounce
+        }, 5000);
 
         return () => clearTimeout(timer);
     }, [title, content, id, lastSavedContent, saveDocument]);
@@ -142,23 +157,25 @@ export default function Editor() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [saveDocument]);
 
-    const loadVersions = async () => {
+    const loadVersions = () => {
         if (!id || !currentUser) return;
+        console.log('[VERSION] Loading versions for document:', id);
         setShowHistory(true);
-        const docRef = doc(db, `artifacts/1:354969438898:web:3fe49633eb0cedafabd7ab/users/${currentUser.uid}/documents`, id);
-        const versionsRef = collection(docRef, 'versions');
-        const snapshot = await getDocs(versionsRef);
-        const v = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        v.sort((a, b) => (b.savedAt?.toMillis() || 0) - (a.savedAt?.toMillis() || 0));
+        setConfirmingVersionId(null); // 重置确认状态
+        const v = mockStorage.getVersions(currentUser.uid, id);
+        v.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+        console.log('[VERSION] Loaded versions:', v.length);
         setVersions(v);
     };
 
-    const restoreVersion = (v) => {
-        if (window.confirm('确定要恢复到此版本吗？当前未保存的内容将丢失。')) {
-            setTitle(v.title);
-            setContent(v.content);
-            setShowHistory(false);
-        }
+    const handleRestore = (v) => {
+        console.log('[VERSION] Restoring version:', { title: v.title, contentLength: v.content?.length });
+        setTitle(v.title || '');
+        setContent(v.content || '');
+        setLastSavedContent(v.content || '');
+        setShowHistory(false);
+        setConfirmingVersionId(null);
+        console.log('[VERSION] Version restored successfully');
     };
 
     return (
@@ -216,8 +233,8 @@ export default function Editor() {
 
             {/* History Modal */}
             {showHistory && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl h-[80vh] flex flex-col p-6">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowHistory(false)}>
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl h-[80vh] flex flex-col p-6" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-lg font-bold text-gray-900">历史版本</h3>
                             <button onClick={() => setShowHistory(false)} className="text-gray-500 hover:text-gray-800">关闭</button>
@@ -227,21 +244,48 @@ export default function Editor() {
                                 <div key={v.id} className="border p-4 rounded hover:bg-gray-50 flex justify-between items-center">
                                     <div>
                                         <p className="font-semibold">版本 {versions.length - i}</p>
-                                        <p className="text-xs text-gray-500">{v.savedAt?.toDate().toLocaleString()}</p>
-                                        <p className="text-sm text-gray-600 mt-1 truncate w-96">{v.content.substring(0, 50)}...</p>
+                                        <p className="text-xs text-gray-500">{new Date(v.savedAt).toLocaleString()}</p>
+                                        <p className="text-sm text-gray-600 mt-1 truncate w-96">{getTextContent(v.content).substring(0, 50)}...</p>
                                     </div>
-                                    <button
-                                        onClick={() => restoreVersion(v)}
-                                        className="text-blue-600 hover:underline text-sm flex items-center gap-1"
-                                    >
-                                        <RotateCcw size={14} /> 恢复
-                                    </button>
+
+                                    {confirmingVersionId === v.id ? (
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRestore(v);
+                                                }}
+                                                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                                            >
+                                                确定恢复?
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setConfirmingVersionId(null);
+                                                }}
+                                                className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
+                                            >
+                                                取消
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setConfirmingVersionId(v.id);
+                                            }}
+                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 whitespace-nowrap"
+                                        >
+                                            <RotateCcw size={14} /> 恢复
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     </div>
                 </div>
             )}
-        </div >
+        </div>
     );
 }

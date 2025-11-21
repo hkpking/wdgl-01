@@ -9,8 +9,11 @@ export default Node.create({
 
     addAttributes() {
         return {
-            data: {
-                default: { cells: [] },
+            xml: {
+                default: null,
+            },
+            previewUrl: {
+                default: null,
             },
             width: {
                 default: '100%',
