@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import Image from '@tiptap/extension-image';
+import ImageExtension from '../extensions/ImageExtension';
 import Link from '@tiptap/extension-link';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -17,16 +17,19 @@ import { LineHeight } from '../extensions/LineHeight';
 import TextAlign from '@tiptap/extension-text-align';
 import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
+import GlobalDragHandle from 'tiptap-extension-global-drag-handle';
 import Flowchart from '../extensions/FlowchartExtension';
-import MenuBar from './MenuBar';
+import { Indent } from '../extensions/Indent';
+import { CommentMark } from '../extensions/CommentMark';
 import TableContextMenu from './TableContextMenu';
 import './editor.css';
 
-export default function RichTextEditor({ content, onChange, placeholder = '开始输入...', editable = true }) {
+export default function RichTextEditor({ content, onChange, placeholder = '开始输入...', editable = true, onEditorReady }) {
     const [menuPosition, setMenuPosition] = useState(null);
 
     const editor = useEditor({
         extensions: [
+            GlobalDragHandle,
             StarterKit.configure({
                 heading: {
                     levels: [1, 2, 3, 4, 5, 6],
@@ -36,7 +39,7 @@ export default function RichTextEditor({ content, onChange, placeholder = '开�
             Placeholder.configure({
                 placeholder,
             }),
-            Image.configure({
+            ImageExtension.configure({
                 inline: true,
                 allowBase64: true,
             }),
@@ -70,6 +73,8 @@ export default function RichTextEditor({ content, onChange, placeholder = '开�
             Color,
             Highlight.configure({ multicolor: true }),
             Flowchart,
+            Indent,
+            CommentMark,
         ],
         content,
         editable,
@@ -79,10 +84,17 @@ export default function RichTextEditor({ content, onChange, placeholder = '开�
         },
         editorProps: {
             attributes: {
-                class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-xl focus:outline-none max-w-none',
+                class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-xl focus:outline-none max-w-none min-h-[900px] px-8 py-10',
             },
         },
     });
+
+    // Expose editor instance
+    useEffect(() => {
+        if (editor && onEditorReady) {
+            onEditorReady(editor);
+        }
+    }, [editor, onEditorReady]);
 
     // Update content when prop changes
     useEffect(() => {
@@ -90,6 +102,13 @@ export default function RichTextEditor({ content, onChange, placeholder = '开�
             editor.commands.setContent(content);
         }
     }, [content, editor]);
+
+    // Update editable state when prop changes
+    useEffect(() => {
+        if (editor) {
+            editor.setEditable(editable);
+        }
+    }, [editor, editable]);
 
     // Handle Context Menu
     const handleContextMenu = (e) => {
@@ -115,7 +134,6 @@ export default function RichTextEditor({ content, onChange, placeholder = '开�
             className="rich-text-editor relative"
             onContextMenu={handleContextMenu}
         >
-            <MenuBar editor={editor} />
             <EditorContent editor={editor} className="editor-content" />
 
             {menuPosition && (

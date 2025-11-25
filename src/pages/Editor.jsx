@@ -1,10 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Clock, RotateCcw } from 'lucide-react';
+import { Clock, ArrowLeft, RotateCcw, MessageSquarePlus, Sparkles } from 'lucide-react';
 import RichTextEditor from '../components/RichTextEditor';
-import ErrorBoundary from '../components/ErrorBoundary';
+import DocHeader from '../components/DocHeader';
+import DocToolbar from '../components/DocToolbar';
+import DocOutline from '../components/DocOutline';
+import Ruler from '../components/Ruler';
+import VersionHistorySidebar from '../components/VersionHistorySidebar';
+import CommentSidebar from '../components/Comments/CommentSidebar';
+import AISidebar from '../components/AI/AISidebar';
 import { getTextContent, isPlainText, plainTextToHtml } from '../utils/editor';
 import * as mockStorage from '../services/mockStorage';
+import { DOC_STATUS, STATUS_LABELS } from '../utils/constants';
+
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useDocumentExport } from '../hooks/useDocumentExport';
+import { importWordDoc } from '../utils/ImportHandler';
 
 export default function Editor() {
     const { id } = useParams();
@@ -15,25 +26,43 @@ export default function Editor() {
 
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
+    const [status, setStatus] = useState(DOC_STATUS.DRAFT);
     const [saving, setSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState(null);
     const [wordCount, setWordCount] = useState(0);
-    const [showHistory, setShowHistory] = useState(false);
-    const [versions, setVersions] = useState([]);
     const [lastSavedContent, setLastSavedContent] = useState('');
-    const [confirmingVersionId, setConfirmingVersionId] = useState(null);
+    const [lastSavedTitle, setLastSavedTitle] = useState('');
+    const [editorInstance, setEditorInstance] = useState(null);
 
-    // Load document if ID exists
+    // Version History State
+    const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
+    const [viewingVersion, setViewingVersion] = useState(null);
+
+    // Export hook
+    const { exportAsPDF } = useDocumentExport();
+
+    // Comment System State
+    const [comments, setComments] = useState([]);
+    const [isCommentSidebarOpen, setIsCommentSidebarOpen] = useState(false);
+    const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
+    const [activeCommentId, setActiveCommentId] = useState(null);
+    const [newCommentDraft, setNewCommentDraft] = useState(null);
+
+    // Load document and comments if ID exists
     useEffect(() => {
-        if (!id || !currentUser) return;
+        // Get current user inside effect to avoid dependency issues
+        const user = mockStorage.getCurrentUser();
+        if (!id || !user) return;
 
         const loadDoc = () => {
             console.log('[LOAD] Loading document:', id);
-            const doc = mockStorage.getDocument(currentUser.uid, id);
+            const doc = mockStorage.getDocument(user.uid, id);
 
             if (doc) {
                 console.log('[LOAD] Document found:', doc);
                 setTitle(doc.title || '');
+                setLastSavedTitle(doc.title || '');
+                setStatus(doc.status || DOC_STATUS.DRAFT);
 
                 // Handle both HTML and plain text formats
                 let loadedContent = doc.content || '';
@@ -43,6 +72,10 @@ export default function Editor() {
                 setContent(loadedContent);
                 setLastSavedContent(loadedContent);
                 setLastSaved(doc.updatedAt ? new Date(doc.updatedAt) : (doc.createdAt ? new Date(doc.createdAt) : null));
+
+                // Load Comments
+                const loadedComments = mockStorage.getComments(user.uid, id);
+                setComments(loadedComments);
             } else {
                 console.log('[LOAD] Document not found, redirecting to home');
                 navigate('/');
@@ -50,242 +83,388 @@ export default function Editor() {
         };
 
         loadDoc();
-    }, [id]); // 只依赖 id,避免循环
+    }, [id, navigate]);
 
-    // Update word count
+    // Auto-save effect
     useEffect(() => {
-        const plainText = getTextContent(content);
-        setWordCount(plainText.length);
-    }, [content]);
+        if (!id || isVersionHistoryOpen) return; // Don't auto-save in version history mode
 
-    const saveDocument = useCallback(async (silent = false) => {
-        console.log('[SAVE] Starting save process...', { title, contentLength: content?.length, id, silent });
+        const timer = setTimeout(() => {
+            if (content !== lastSavedContent || title !== lastSavedTitle) {
+                handleSave();
+            }
+        }, 3000);
 
-        if (!title && !content) {
-            console.log('[SAVE] Aborted: No title and no content');
-            return;
-        }
+        return () => clearTimeout(timer);
+    }, [content, title, status, lastSavedContent, lastSavedTitle, isVersionHistoryOpen]);
 
-        if (!currentUser) {
-            console.error('[SAVE] Aborted: No current user - user not logged in!');
-            alert('请先登录后再保存文档');
-            return;
-        }
+    // Browser close warning
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (content !== lastSavedContent || title !== lastSavedTitle) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [content, lastSavedContent, title, lastSavedTitle]);
 
-        console.log('[SAVE] Current user:', currentUser.uid);
-        console.log('[SAVE] Setting saving state to true');
+    const handleSave = async () => {
+        if (!title.trim()) return;
+
         setSaving(true);
-
         try {
             const docData = {
                 title,
                 content,
+                status,
                 contentType: 'html'
             };
 
-            if (id) {
-                // Update existing document
-                console.log('[SAVE] Updating existing document with ID:', id);
+            console.log('[SAVE] Saving document:', docData);
+            mockStorage.saveDocument(currentUser.uid, id, docData);
 
-                // Save version before update
-                console.log('[SAVE] Creating version backup...');
-                mockStorage.saveVersion(currentUser.uid, id, { title, content });
-                console.log('[SAVE] Version backup created');
-
-                console.log('[SAVE] Updating document...');
-                mockStorage.saveDocument(currentUser.uid, id, docData);
-                console.log('[SAVE] Document updated successfully');
-            } else {
-                // Create new document
-                console.log('[SAVE] Creating new document...');
-                const savedDoc = mockStorage.saveDocument(currentUser.uid, null, docData);
-                console.log('[SAVE] New document created with ID:', savedDoc.id);
-
-                // Create initial version
-                console.log('[SAVE] Creating initial version...');
-                mockStorage.saveVersion(currentUser.uid, savedDoc.id, { title, content });
-                console.log('[SAVE] Initial version created');
-
-                // Navigate to the new document URL
-                console.log('[SAVE] Navigating to new document...');
-                navigate(`/editor/${savedDoc.id}`, { replace: true });
-            }
-
-            if (!silent) {
-                console.log('[SAVE] Save completed successfully');
-            }
-        } catch (error) {
-            console.error('[SAVE] Save failed:', error);
-            alert("保存失败: " + error.message);
-        } finally {
-            console.log('[SAVE] Entering finally block');
-            console.log('[SAVE] Setting saving state to false');
-            setSaving(false);
-
-            const now = new Date();
-            console.log('[SAVE] Updating lastSaved to:', now);
-            setLastSaved(now);
-            console.log('[SAVE] Updating lastSavedContent');
+            setLastSaved(new Date());
             setLastSavedContent(content);
-            console.log('[SAVE] Save process completed');
+            setLastSavedTitle(title);
+
+            // Save version history
+            mockStorage.saveVersion(currentUser.uid, id, {
+                title,
+                content,
+                status
+            });
+
+        } catch (error) {
+            console.error('[SAVE] Error saving:', error);
+            alert(error.message);
+        } finally {
+            setSaving(false);
         }
-    }, [title, content, id, currentUser, navigate]);
+    };
 
-    // Auto-save every 5 seconds if content changed
-    useEffect(() => {
-        if (!id || (!title && !content)) return;
+    const handleImport = async (file) => {
+        if (!editorInstance) return;
+        try {
+            const html = await importWordDoc(file);
+            // Insert content at cursor position or append?
+            // Let's insert content.
+            editorInstance.chain().focus().insertContent(html).run();
+            alert('导入成功！');
+        } catch (error) {
+            console.error('Import failed:', error);
+            alert(`导入失败: ${error.message}`);
+        }
+    };
 
-        const contentChanged = content !== lastSavedContent;
-        if (!contentChanged) return;
+    // Comment Handlers
+    const handleAddComment = () => {
+        if (!editorInstance) return;
+        const { from, to, empty } = editorInstance.state.selection;
 
-        const timer = setTimeout(() => {
-            saveDocument(true); // Silent save
-        }, 5000);
+        if (empty) {
+            alert('请先选择要评论的文本');
+            return;
+        }
 
-        return () => clearTimeout(timer);
-    }, [title, content, id, lastSavedContent, saveDocument]);
+        const quote = editorInstance.state.doc.textBetween(from, to, ' ');
+        setIsCommentSidebarOpen(true);
+        setIsAISidebarOpen(false); // Close AI sidebar if opening comments
+        setNewCommentDraft({ quote, from, to });
+    };
 
-    // Keyboard shortcut
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault();
-                saveDocument();
+    const handleSubmitComment = (content) => {
+        if (!newCommentDraft || !currentUser) return;
+
+        const commentData = {
+            docId: id,
+            quote: newCommentDraft.quote,
+            content,
+            author: {
+                uid: currentUser.uid,
+                name: currentUser.displayName || currentUser.email
             }
         };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [saveDocument]);
 
-    const loadVersions = () => {
-        if (!id || !currentUser) return;
-        console.log('[VERSION] Loading versions for document:', id);
-        setShowHistory(true);
-        setConfirmingVersionId(null); // 重置确认状态
-        const v = mockStorage.getVersions(currentUser.uid, id);
-        v.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
-        console.log('[VERSION] Loaded versions:', v.length);
-        setVersions(v);
+        const newComment = mockStorage.addComment(currentUser.uid, id, commentData);
+        setComments([...comments, newComment]);
+
+        // Add Mark to Editor
+        editorInstance.chain().focus().setTextSelection({ from: newCommentDraft.from, to: newCommentDraft.to }).setComment({ commentId: newComment.id }).run();
+
+        setNewCommentDraft(null);
+        setActiveCommentId(newComment.id);
     };
 
-    const handleRestore = (v) => {
-        console.log('[VERSION] Restoring version:', { title: v.title, contentLength: v.content?.length });
-        setTitle(v.title || '');
-        setContent(v.content || '');
-        setLastSavedContent(v.content || '');
-        setShowHistory(false);
-        setConfirmingVersionId(null);
-        console.log('[VERSION] Version restored successfully');
+    const handleReply = (commentId, content) => {
+        if (!currentUser) return;
+        const replyData = {
+            content,
+            author: {
+                uid: currentUser.uid,
+                name: currentUser.displayName || currentUser.email
+            }
+        };
+        const newReply = mockStorage.addReply(currentUser.uid, id, commentId, replyData);
+
+        // Update local state
+        setComments(comments.map(c => {
+            if (c.id === commentId) {
+                return { ...c, replies: [...c.replies, newReply] };
+            }
+            return c;
+        }));
     };
+
+    const handleResolve = (commentId) => {
+        const updatedComment = mockStorage.updateCommentStatus(currentUser.uid, id, commentId, 'resolved');
+        setComments(comments.map(c => c.id === commentId ? updatedComment : c));
+    };
+
+    const handleDelete = (commentId) => {
+        if (window.confirm('确定要删除这条评论吗？')) {
+            mockStorage.deleteComment(currentUser.uid, id, commentId);
+            setComments(comments.filter(c => c.id !== commentId));
+
+            // Remove Mark from Editor (This is tricky without knowing exact range, 
+            // but Tiptap marks are part of the document content. 
+            // We need to find marks with this commentId and unset them.
+            // For now, we rely on the user manually removing it or we implement a 'unsetComment' command that scans doc.)
+            // Simplified: Just remove from list. The mark stays until manually removed or we implement advanced removal.
+            // Better: We can traverse the doc to find the mark.
+            // For MVP, let's leave the mark but it won't link to anything valid, or we can try to remove it if active.
+        }
+    };
+
+    const toggleAISidebar = () => {
+        setIsAISidebarOpen(!isAISidebarOpen);
+        if (!isAISidebarOpen) setIsCommentSidebarOpen(false); // Close comments if opening AI
+    };
+
+    // Keyboard Shortcuts
+    useKeyboardShortcuts({
+        onSave: handleSave,
+        onPrint: exportAsPDF,
+        onHistory: () => setIsVersionHistoryOpen(true),
+        onWordCount: () => alert(`当前文档字数: ${wordCount} 字`),
+        onClearFormat: () => editorInstance?.chain().focus().unsetAllMarks().run()
+    });
+
+    const handleBack = () => {
+        if (content !== lastSavedContent) {
+            if (window.confirm('您有未保存的更改，确定要离开吗？')) {
+                navigate('/');
+            }
+        } else {
+            navigate('/');
+        }
+    };
+
+    const handleShare = () => {
+        alert('共享功能开发中...');
+    };
+
+
+
+    const handleRestoreVersion = () => {
+        if (!viewingVersion) return;
+
+        if (window.confirm('确定要还原到此版本吗？当前未保存的更改将会丢失。')) {
+            setContent(viewingVersion.content);
+            setLastSavedContent(viewingVersion.content); // Treat as saved to avoid overwrite warning
+            setIsVersionHistoryOpen(false);
+            setViewingVersion(null);
+
+            setTimeout(() => {
+                const docData = {
+                    title,
+                    content: viewingVersion.content,
+                    status,
+                    contentType: 'html'
+                };
+                mockStorage.saveDocument(currentUser.uid, id, docData);
+                mockStorage.saveVersion(currentUser.uid, id, { title, content: viewingVersion.content, status });
+                setLastSaved(new Date());
+            }, 100);
+        }
+    };
+
+    // Determine if editable (id always exists in instant creation mode)
+    const canEdit = status === DOC_STATUS.DRAFT && !isVersionHistoryOpen;
+
+    if (id && !canEdit && !isVersionHistoryOpen) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+                <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-md">
+                    <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Clock size={32} />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">文档处于"{STATUS_LABELS[status]}"状态</h2>
+                    <p className="text-gray-600 mb-6">当前状态下无法直接编辑。如需修改，请先撤回或创建新版本。</p>
+                    <div className="flex gap-4 justify-center">
+                        <button
+                            onClick={() => navigate('/')}
+                            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
+                        >
+                            返回仪表盘
+                        </button>
+                        <button
+                            onClick={() => navigate(`/view/${id}`)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        >
+                            查看文档
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="min-h-screen bg-gray-100 flex flex-col">
-            {/* Header */}
-            <header className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-                <div className="flex items-center gap-4">
-                    <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-800">
-                        <ArrowLeft size={24} />
-                    </button>
-                    <input
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="无标题文档"
-                        className="text-xl font-bold text-gray-800 border-none focus:ring-0 placeholder-gray-400 bg-transparent"
-                    />
-                </div>
-                <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-500 hidden md:inline">
-                        {saving ? '保存中...' :
-                            lastSaved ? `已保存 ${lastSaved.toLocaleTimeString()}` :
-                                (content !== lastSavedContent && content) ? '未保存的更改' : '未保存'}
-                    </span>
-                    <span className="text-sm text-gray-500">{wordCount} 字</span>
-                    <button
-                        onClick={loadVersions}
-                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition"
-                        title="历史版本"
-                        disabled={!id}
-                    >
-                        <Clock size={20} />
-                    </button>
-                    <button
-                        onClick={() => saveDocument()}
-                        disabled={saving}
-                        className="flex items-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
-                    >
-                        <Save size={18} />
-                        {saving ? '保存中' : '保存'}
-                    </button>
-                </div>
-            </header>
-
-            {/* Editor Area */}
-            <main className="flex-1 max-w-4xl mx-auto w-full p-6">
-                <ErrorBoundary>
-                    <RichTextEditor
-                        content={content}
-                        onChange={setContent}
-                        placeholder="开始写作..."
-                    />
-                </ErrorBoundary>
-            </main>
-
-            {/* History Modal */}
-            {showHistory && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowHistory(false)}>
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl h-[80vh] flex flex-col p-6" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold text-gray-900">历史版本</h3>
-                            <button onClick={() => setShowHistory(false)} className="text-gray-500 hover:text-gray-800">关闭</button>
+        <div className="h-screen flex flex-col bg-[#f9fbfd] overflow-hidden">
+            {/* ... (Header logic remains same) ... */}
+            {isVersionHistoryOpen ? (
+                <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-20 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => {
+                                setIsVersionHistoryOpen(false);
+                                setViewingVersion(null);
+                                setContent(lastSavedContent);
+                            }}
+                            className="text-gray-600 hover:bg-gray-100 p-2 rounded transition"
+                        >
+                            ← 返回编辑
+                        </button>
+                        <div>
+                            <h2 className="font-medium text-gray-900">版本历史</h2>
+                            {viewingVersion && (
+                                <p className="text-xs text-gray-500">
+                                    正在查看历史版本 - {new Date(viewingVersion.savedAt).toLocaleString()}
+                                </p>
+                            )}
                         </div>
-                        <div className="flex-1 overflow-y-auto space-y-3">
-                            {versions.length === 0 ? <p>暂无历史记录</p> : versions.map((v, i) => (
-                                <div key={v.id} className="border p-4 rounded hover:bg-gray-50 flex justify-between items-center">
-                                    <div>
-                                        <p className="font-semibold">版本 {versions.length - i}</p>
-                                        <p className="text-xs text-gray-500">{new Date(v.savedAt).toLocaleString()}</p>
-                                        <p className="text-sm text-gray-600 mt-1 truncate w-96">{getTextContent(v.content).substring(0, 50)}...</p>
-                                    </div>
+                    </div>
+                    {viewingVersion && (
+                        <button
+                            onClick={handleRestoreVersion}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+                        >
+                            恢复此版本
+                        </button>
+                    )}
+                </header>
+            ) : (
+                <DocHeader
+                    title={title}
+                    setTitle={setTitle}
+                    status={status}
+                    saving={saving}
+                    lastSaved={lastSaved}
+                    onBack={handleBack}
+                    onShare={handleShare}
+                    editor={editorInstance}
+                    onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}
+                    onAddComment={handleAddComment} // Pass handler
+                    onImport={handleImport}
+                >
+                    <button
+                        onClick={toggleAISidebar}
+                        className={`p-2 rounded-lg transition mr-2 flex items-center gap-1 ${isAISidebarOpen ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                        title="AI 助手"
+                    >
+                        <Sparkles size={18} />
+                        <span className="text-sm font-medium">AI 助手</span>
+                    </button>
+                </DocHeader>
+            )}
 
-                                    {confirmingVersionId === v.id ? (
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleRestore(v);
-                                                }}
-                                                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-                                            >
-                                                确定恢复?
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setConfirmingVersionId(null);
-                                                }}
-                                                className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
-                                            >
-                                                取消
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setConfirmingVersionId(v.id);
-                                            }}
-                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 whitespace-nowrap"
-                                        >
-                                            <RotateCcw size={14} /> 恢复
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+            {!isVersionHistoryOpen && <div className="no-print"><DocToolbar editor={editorInstance} onAddComment={handleAddComment} /></div>}
+
+            <div className="flex flex-1 overflow-hidden relative print-content-wrapper">
+                {/* Left Sidebar: Outline */}
+                {!isVersionHistoryOpen && <div className="no-print"><DocOutline editor={editorInstance} /></div>}
+
+                {/* Main Content Area */}
+                <div className="flex-1 overflow-auto flex flex-col items-center bg-[#f9fbfd] relative print-content-wrapper">
+                    {/* Sticky Ruler */}
+                    {!isVersionHistoryOpen && (
+                        <div className="sticky top-0 z-10 w-full max-w-[816px] no-print">
+                            <Ruler editor={editorInstance} />
+                        </div>
+                    )}
+
+                    {/* Page Container */}
+                    <div className="py-4 px-4 pb-20 print-content-wrapper">
+                        <div className="bg-white shadow-lg w-[816px] min-h-[1056px] mx-auto print-page relative">
+                            <RichTextEditor
+                                content={content}
+                                onChange={(newContent) => {
+                                    if (newContent === content) return;
+                                    if (!isVersionHistoryOpen) {
+                                        setContent(newContent);
+                                        const text = getTextContent(newContent);
+                                        setWordCount(text.length);
+                                    }
+                                }}
+                                editable={canEdit}
+                                onEditorReady={setEditorInstance}
+                            />
                         </div>
                     </div>
                 </div>
-            )}
+
+                {/* Right Sidebar: Version History OR Comment Sidebar */}
+                {isVersionHistoryOpen && (
+                    <div className="no-print">
+                        <VersionHistorySidebar
+                            docId={id}
+                            currentUser={currentUser}
+                            currentVersionId={viewingVersion?.id}
+                            onSelectVersion={(version) => {
+                                setViewingVersion(version);
+                                setContent(version.content);
+                            }}
+                            onClose={() => {
+                                setIsVersionHistoryOpen(false);
+                                setViewingVersion(null);
+                                setContent(lastSavedContent);
+                            }}
+                        />
+                    </div>
+                )}
+
+                {/* Comment Sidebar */}
+                {!isVersionHistoryOpen && isCommentSidebarOpen && (
+                    <div className="no-print border-l border-gray-200">
+                        <CommentSidebar
+                            comments={comments}
+                            currentUser={currentUser}
+                            activeCommentId={activeCommentId}
+                            onAddComment={handleAddComment}
+                            onReply={handleReply}
+                            onResolve={handleResolve}
+                            onDelete={handleDelete}
+                            onClose={() => setIsCommentSidebarOpen(false)}
+                            newCommentDraft={newCommentDraft}
+                            onCancelDraft={() => setNewCommentDraft(null)}
+                            onSubmitDraft={handleSubmitComment}
+                        />
+                    </div>
+                )}
+
+                {/* Right Sidebar: AI Assistant */}
+                {isAISidebarOpen && !isVersionHistoryOpen && (
+                    <div className="no-print h-full border-l border-gray-200">
+                        <AISidebar
+                            currentUser={currentUser}
+                            currentDoc={{ id, title, content }}
+                            onClose={() => setIsAISidebarOpen(false)}
+                        />
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

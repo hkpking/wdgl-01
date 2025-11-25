@@ -7,3 +7,57 @@
     @apply bg-gray-100 text-gray-900 font-sans;
   }
 }
+
+@media print {
+  @page {
+    margin: 2cm;
+    size: A4;
+  }
+
+  /* Universal hide class */
+  .no-print,
+  header,
+  nav,
+  aside,
+  .fixed,
+  .sticky {
+    display: none !important;
+  }
+
+  /* Reset layout for the main content */
+  body,
+  #root,
+  .print-content-wrapper {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    position: static !important;
+  }
+
+  /* Target the page container specifically */
+  .print-page {
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: auto !important;
+    border: none !important;
+  }
+
+  /* Ensure the editor content flows naturally */
+  .ProseMirror {
+    padding: 0 !important;
+    margin: 0 !important;
+    outline: none !important;
+    border: none !important;
+  }
+
+  /* Ensure text is black */
+  * {
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

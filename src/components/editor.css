@@ -205,3 +205,35 @@
         @apply overflow-x-auto;
     }
 }
+.global-drag-handle {
+  position: absolute;
+  left: -24px;
+  top: 0;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.ProseMirror-selectednode .global-drag-handle,
+.ProseMirror-focused .global-drag-handle,
+.tiptap:hover .global-drag-handle {
+  opacity: 1;
+}
+
+
+/* Comment Styles */
+.ProseMirror span[data-comment-id] {
+    background-color: #fef08a; /* yellow-200 */
+    border-bottom: 2px solid #eab308; /* yellow-500 */
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.ProseMirror span[data-comment-id]:hover {
+    background-color: #fde047; /* yellow-300 */
+}
+
+.ProseMirror span[data-comment-id].active-comment {
+    background-color: #fcd34d; /* yellow-400 */
+    border-bottom: 2px solid #ca8a04; /* yellow-600 */
+}

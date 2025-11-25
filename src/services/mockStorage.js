@@ -8,10 +8,17 @@ const STORAGE_PREFIX = 'wdgl_';
 const DOCUMENTS_KEY = `${STORAGE_PREFIX}documents`;
 const CURRENT_USER_KEY = `${STORAGE_PREFIX}current_user`;
 
+// 模拟系统知识库 (System Knowledge) - 只读
+const SYSTEM_KNOWLEDGE = [
+    { id: 'sys_compliance', title: '企业合规指导手册 (2024版)', content: '所有员工必须遵守反腐败规定... 报销必须提供正规发票...', type: 'system' },
+    { id: 'sys_security', title: '信息安全管理规范', content: '严禁将公司数据上传至未授权的公有云服务... 密码必须每90天更换一次...', type: 'system' },
+    { id: 'sys_hr', title: '员工行为准则', content: '工作时间禁止从事与工作无关的活动... 尊重同事，禁止歧视...', type: 'system' }
+];
+
 /**
  * 生成唯一 ID
  */
-function generateId() {
+export function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
@@ -37,6 +44,35 @@ export function getAllDocuments(userId) {
         console.error('获取文档失败:', error);
         return [];
     }
+}
+
+/**
+ * 获取系统知识库文档
+ */
+export function getSystemKnowledge() {
+    return SYSTEM_KNOWLEDGE;
+}
+
+/**
+ * 搜索文档 (包括用户文档和系统知识)
+ */
+export function searchDocuments(userId, query) {
+    if (!query) return [];
+    const lowerQuery = query.toLowerCase();
+
+    // 1. 搜索用户文档
+    const userDocs = getAllDocuments(userId).filter(doc =>
+        (doc.title || '').toLowerCase().includes(lowerQuery) ||
+        (doc.content || '').toLowerCase().includes(lowerQuery)
+    ).map(doc => ({ ...doc, type: 'user' }));
+
+    // 2. 搜索系统知识
+    const sysDocs = SYSTEM_KNOWLEDGE.filter(doc =>
+        doc.title.toLowerCase().includes(lowerQuery) ||
+        doc.content.toLowerCase().includes(lowerQuery)
+    );
+
+    return [...userDocs, ...sysDocs];
 }
 
 /**
@@ -300,4 +336,273 @@ export function getStorageInfo() {
         usage,
         message: `已使用 ${totalMB}MB / ~${maxMB}MB (${usage}%)`
     };
+}
+
+/**
+ * 更新版本信息 (例如重命名)
+ */
+export function updateVersion(userId, docId, versionId, updates) {
+    const versionKey = `${STORAGE_PREFIX}versions_${userId}_${docId}`;
+    try {
+        const versions = JSON.parse(localStorage.getItem(versionKey) || '[]');
+        const index = versions.findIndex(v => v.id === versionId);
+
+        if (index !== -1) {
+            versions[index] = { ...versions[index], ...updates };
+            localStorage.setItem(versionKey, JSON.stringify(versions));
+            return versions[index];
+        }
+        return null;
+    } catch (error) {
+        console.error('更新版本失败:', error);
+        return null;
+    }
+}
+
+/**
+ * ------------------------------------------------------------------
+ * 评论系统数据存储
+ * ------------------------------------------------------------------
+ */
+
+/**
+ * 获取文档的所有评论
+ */
+export function getComments(userId, docId) {
+    const key = `${STORAGE_PREFIX}comments_${userId}_${docId}`;
+    try {
+        return JSON.parse(localStorage.getItem(key) || '[]');
+    } catch (error) {
+        console.error('获取评论失败:', error);
+        return [];
+    }
+}
+
+/**
+ * 添加评论
+ */
+export function addComment(userId, docId, comment) {
+    const key = `${STORAGE_PREFIX}comments_${userId}_${docId}`;
+    try {
+        const comments = getComments(userId, docId);
+        const newComment = {
+            id: comment.id || generateId(),
+            createdAt: getTimestamp(),
+            status: 'open', // open, resolved
+            replies: [],
+            ...comment
+        };
+        comments.push(newComment);
+        localStorage.setItem(key, JSON.stringify(comments));
+        return newComment;
+    } catch (error) {
+        console.error('添加评论失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 添加回复
+ */
+export function addReply(userId, docId, commentId, reply) {
+    const key = `${STORAGE_PREFIX}comments_${userId}_${docId}`;
+    try {
+        const comments = getComments(userId, docId);
+        const index = comments.findIndex(c => c.id === commentId);
+
+        if (index !== -1) {
+            const newReply = {
+                id: generateId(),
+                createdAt: getTimestamp(),
+                ...reply
+            };
+            comments[index].replies.push(newReply);
+            localStorage.setItem(key, JSON.stringify(comments));
+            return newReply;
+        }
+        return null;
+    } catch (error) {
+        console.error('添加回复失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 解决/重新打开评论
+ */
+export function updateCommentStatus(userId, docId, commentId, status) {
+    const key = `${STORAGE_PREFIX}comments_${userId}_${docId}`;
+    try {
+        const comments = getComments(userId, docId);
+        const index = comments.findIndex(c => c.id === commentId);
+
+        if (index !== -1) {
+            comments[index].status = status;
+            localStorage.setItem(key, JSON.stringify(comments));
+            return comments[index];
+        }
+        return null;
+    } catch (error) {
+        console.error('更新评论状态失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 删除评论
+ */
+export function deleteComment(userId, docId, commentId) {
+    const key = `${STORAGE_PREFIX}comments_${userId}_${docId}`;
+    try {
+        const comments = getComments(userId, docId);
+        const newComments = comments.filter(c => c.id !== commentId);
+        localStorage.setItem(key, JSON.stringify(newComments));
+        return true;
+    } catch (error) {
+        console.error('删除评论失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * ------------------------------------------------------------------
+ * 目录管理 (Folder Management)
+ * ------------------------------------------------------------------
+ */
+
+const FOLDERS_KEY = `${STORAGE_PREFIX}folders`;
+
+/**
+ * 获取所有文件夹
+ */
+export function getFolders(userId) {
+    try {
+        const allFolders = JSON.parse(localStorage.getItem(FOLDERS_KEY) || '{}');
+        const userFolders = allFolders[userId] || {};
+
+        // 如果是第一次使用，初始化默认文件夹
+        if (Object.keys(userFolders).length === 0) {
+            const defaultFolders = [
+                { id: 'f_company', name: '公司制度', parentId: null },
+                { id: 'f_hr', name: '人事管理', parentId: 'f_company' },
+                { id: 'f_admin', name: '行政管理', parentId: 'f_company' },
+                { id: 'f_finance', name: '财务管理', parentId: 'f_company' },
+            ];
+
+            const initialFolders = {};
+            defaultFolders.forEach(f => {
+                initialFolders[f.id] = { ...f, createdAt: getTimestamp() };
+            });
+
+            allFolders[userId] = initialFolders;
+            localStorage.setItem(FOLDERS_KEY, JSON.stringify(allFolders));
+            return Object.values(initialFolders);
+        }
+
+        return Object.values(userFolders);
+    } catch (error) {
+        console.error('获取文件夹失败:', error);
+        return [];
+    }
+}
+
+/**
+ * 创建文件夹
+ */
+export function createFolder(userId, name, parentId = null) {
+    try {
+        const allFolders = JSON.parse(localStorage.getItem(FOLDERS_KEY) || '{}');
+        if (!allFolders[userId]) allFolders[userId] = {};
+
+        const folderId = `f_${generateId()}`;
+        const newFolder = {
+            id: folderId,
+            name,
+            parentId,
+            createdAt: getTimestamp()
+        };
+
+        allFolders[userId][folderId] = newFolder;
+        localStorage.setItem(FOLDERS_KEY, JSON.stringify(allFolders));
+        return newFolder;
+    } catch (error) {
+        console.error('创建文件夹失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 更新文件夹 (重命名/移动)
+ */
+export function updateFolder(userId, folderId, updates) {
+    try {
+        const allFolders = JSON.parse(localStorage.getItem(FOLDERS_KEY) || '{}');
+        if (allFolders[userId] && allFolders[userId][folderId]) {
+            allFolders[userId][folderId] = { ...allFolders[userId][folderId], ...updates };
+            localStorage.setItem(FOLDERS_KEY, JSON.stringify(allFolders));
+            return allFolders[userId][folderId];
+        }
+        return null;
+    } catch (error) {
+        console.error('更新文件夹失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 删除文件夹
+ * 注意：通常需要检查文件夹是否为空，或者递归删除。这里简化处理，只删除文件夹本身。
+ * 其中的文件会变成 "未分类" (parentId: null)
+ */
+export function deleteFolder(userId, folderId) {
+    try {
+        const allFolders = JSON.parse(localStorage.getItem(FOLDERS_KEY) || '{}');
+        if (allFolders[userId] && allFolders[userId][folderId]) {
+            delete allFolders[userId][folderId];
+            localStorage.setItem(FOLDERS_KEY, JSON.stringify(allFolders));
+
+            // 将该文件夹下的子文件夹移动到根目录
+            Object.values(allFolders[userId]).forEach(f => {
+                if (f.parentId === folderId) {
+                    f.parentId = null;
+                }
+            });
+            localStorage.setItem(FOLDERS_KEY, JSON.stringify(allFolders));
+
+            // 将该文件夹下的文档移动到根目录
+            const allDocs = JSON.parse(localStorage.getItem(DOCUMENTS_KEY) || '{}');
+            if (allDocs[userId]) {
+                Object.values(allDocs[userId]).forEach(doc => {
+                    if (doc.parentId === folderId) {
+                        doc.parentId = null;
+                    }
+                });
+                localStorage.setItem(DOCUMENTS_KEY, JSON.stringify(allDocs));
+            }
+
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('删除文件夹失败:', error);
+        return false;
+    }
+}
+
+/**
+ * 移动文档到文件夹
+ */
+export function moveDocument(userId, docId, folderId) {
+    try {
+        const allDocs = JSON.parse(localStorage.getItem(DOCUMENTS_KEY) || '{}');
+        if (allDocs[userId] && allDocs[userId][docId]) {
+            allDocs[userId][docId].parentId = folderId;
+            localStorage.setItem(DOCUMENTS_KEY, JSON.stringify(allDocs));
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('移动文档失败:', error);
+        return false;
+    }
 }
