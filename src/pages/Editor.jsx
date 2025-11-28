@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Clock, ArrowLeft, RotateCcw, MessageSquarePlus, Sparkles } from 'lucide-react';
-import RichTextEditor from '../components/RichTextEditor';
+import StructuredEditor from '../components/StructuredEditor/StructuredEditor';
 import DocHeader from '../components/DocHeader';
 import DocToolbar from '../components/DocToolbar';
-import DocOutline from '../components/DocOutline';
-import Ruler from '../components/Ruler';
+// import DocOutline from '../components/DocOutline'; // Replaced by internal sidebar
+// import Ruler from '../components/Ruler'; // Not needed for block editor
 import VersionHistorySidebar from '../components/VersionHistorySidebar';
 import CommentSidebar from '../components/Comments/CommentSidebar';
 import AISidebar from '../components/AI/AISidebar';
 import { getTextContent, isPlainText, plainTextToHtml } from '../utils/editor';
+import { htmlToBlocks, blocksToHtml } from '../utils/blockConverter';
 import * as mockStorage from '../services/mockStorage';
 import { DOC_STATUS, STATUS_LABELS } from '../utils/constants';
 
@@ -25,14 +26,15 @@ export default function Editor() {
     const currentUser = mockStorage.getCurrentUser();
 
     const [title, setTitle] = useState('');
-    const [content, setContent] = useState('');
+    const [content, setContent] = useState(''); // Keep for backward compatibility / export
+    const [blocks, setBlocks] = useState([]); // New block state
     const [status, setStatus] = useState(DOC_STATUS.DRAFT);
     const [saving, setSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState(null);
     const [wordCount, setWordCount] = useState(0);
     const [lastSavedContent, setLastSavedContent] = useState('');
     const [lastSavedTitle, setLastSavedTitle] = useState('');
-    const [editorInstance, setEditorInstance] = useState(null);
+    // const [editorInstance, setEditorInstance] = useState(null); // No longer using Tiptap instance directly
 
     // Version History State
     const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
@@ -64,12 +66,23 @@ export default function Editor() {
                 setLastSavedTitle(doc.title || '');
                 setStatus(doc.status || DOC_STATUS.DRAFT);
 
-                // Handle both HTML and plain text formats
+                // Handle content loading
                 let loadedContent = doc.content || '';
-                if (isPlainText(loadedContent)) {
-                    loadedContent = plainTextToHtml(loadedContent);
+                let loadedBlocks = [];
+
+                if (doc.contentType === 'blocks' && Array.isArray(doc.blocks)) {
+                    loadedBlocks = doc.blocks;
+                    loadedContent = blocksToHtml(loadedBlocks); // Generate HTML for preview/export
+                } else {
+                    // Legacy HTML or Plain Text
+                    if (isPlainText(loadedContent)) {
+                        loadedContent = plainTextToHtml(loadedContent);
+                    }
+                    loadedBlocks = htmlToBlocks(loadedContent);
                 }
+
                 setContent(loadedContent);
+                setBlocks(loadedBlocks);
                 setLastSavedContent(loadedContent);
                 setLastSaved(doc.updatedAt ? new Date(doc.updatedAt) : (doc.createdAt ? new Date(doc.createdAt) : null));
 
@@ -115,11 +128,13 @@ export default function Editor() {
 
         setSaving(true);
         try {
+            const htmlContent = blocksToHtml(blocks);
             const docData = {
                 title,
-                content,
+                content: htmlContent, // Save HTML representation
+                blocks: blocks,       // Save structured blocks
                 status,
-                contentType: 'html'
+                contentType: 'blocks'
             };
 
             console.log('[SAVE] Saving document:', docData);
@@ -132,7 +147,8 @@ export default function Editor() {
             // Save version history
             mockStorage.saveVersion(currentUser.uid, id, {
                 title,
-                content,
+                content: htmlContent,
+                blocks: blocks,
                 status
             });
 
@@ -145,12 +161,11 @@ export default function Editor() {
     };
 
     const handleImport = async (file) => {
-        if (!editorInstance) return;
         try {
             const html = await importWordDoc(file);
-            // Insert content at cursor position or append?
-            // Let's insert content.
-            editorInstance.chain().focus().insertContent(html).run();
+            const newBlocks = htmlToBlocks(html);
+            // Append new blocks
+            setBlocks(prev => [...prev, ...newBlocks]);
             alert('导入成功！');
         } catch (error) {
             console.error('Import failed:', error);
@@ -160,18 +175,20 @@ export default function Editor() {
 
     // Comment Handlers
     const handleAddComment = () => {
-        if (!editorInstance) return;
-        const { from, to, empty } = editorInstance.state.selection;
+        alert('评论功能正在适配新编辑器，暂时不可用');
+        return;
+        // if (!editorInstance) return;
+        // const { from, to, empty } = editorInstance.state.selection;
 
-        if (empty) {
-            alert('请先选择要评论的文本');
-            return;
-        }
+        // if (empty) {
+        //     alert('请先选择要评论的文本');
+        //     return;
+        // }
 
-        const quote = editorInstance.state.doc.textBetween(from, to, ' ');
-        setIsCommentSidebarOpen(true);
-        setIsAISidebarOpen(false); // Close AI sidebar if opening comments
-        setNewCommentDraft({ quote, from, to });
+        // const quote = editorInstance.state.doc.textBetween(from, to, ' ');
+        // setIsCommentSidebarOpen(true);
+        // setIsAISidebarOpen(false); // Close AI sidebar if opening comments
+        // setNewCommentDraft({ quote, from, to });
     };
 
     const handleSubmitComment = (content) => {
@@ -190,8 +207,8 @@ export default function Editor() {
         const newComment = mockStorage.addComment(currentUser.uid, id, commentData);
         setComments([...comments, newComment]);
 
-        // Add Mark to Editor
-        editorInstance.chain().focus().setTextSelection({ from: newCommentDraft.from, to: newCommentDraft.to }).setComment({ commentId: newComment.id }).run();
+        // Add Mark to Editor - Disabled for Block Editor
+        // editorInstance.chain().focus().setTextSelection({ from: newCommentDraft.from, to: newCommentDraft.to }).setComment({ commentId: newComment.id }).run();
 
         setNewCommentDraft(null);
         setActiveCommentId(newComment.id);
@@ -238,8 +255,10 @@ export default function Editor() {
     };
 
     const toggleAISidebar = () => {
-        setIsAISidebarOpen(!isAISidebarOpen);
-        if (!isAISidebarOpen) setIsCommentSidebarOpen(false); // Close comments if opening AI
+        // Open AI tab in StructuredEditor
+        if (structuredEditorRef.current) {
+            structuredEditorRef.current.openAITab();
+        }
     };
 
     // Keyboard Shortcuts
@@ -248,7 +267,7 @@ export default function Editor() {
         onPrint: exportAsPDF,
         onHistory: () => setIsVersionHistoryOpen(true),
         onWordCount: () => alert(`当前文档字数: ${wordCount} 字`),
-        onClearFormat: () => editorInstance?.chain().focus().unsetAllMarks().run()
+        onClearFormat: () => { } // Not applicable for block editor yet
     });
 
     const handleBack = () => {
@@ -292,6 +311,14 @@ export default function Editor() {
 
     // Determine if editable (id always exists in instant creation mode)
     const canEdit = status === DOC_STATUS.DRAFT && !isVersionHistoryOpen;
+
+    const structuredEditorRef = useRef(null);
+
+    const handleInsertBlock = (type, meta) => {
+        if (structuredEditorRef.current) {
+            structuredEditorRef.current.addBlock(type, meta);
+        }
+    };
 
     if (id && !canEdit && !isVersionHistoryOpen) {
         return (
@@ -364,10 +391,12 @@ export default function Editor() {
                     lastSaved={lastSaved}
                     onBack={handleBack}
                     onShare={handleShare}
-                    editor={editorInstance}
                     onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}
                     onAddComment={handleAddComment} // Pass handler
                     onImport={handleImport}
+                    onInsertBlock={handleInsertBlock} // Pass insert handler
+                    content={content} // Pass content for export
+                    editor={null} // Removed editor instance
                 >
                     <button
                         onClick={toggleAISidebar}
@@ -380,91 +409,79 @@ export default function Editor() {
                 </DocHeader>
             )}
 
-            {!isVersionHistoryOpen && <div className="no-print"><DocToolbar editor={editorInstance} onAddComment={handleAddComment} /></div>}
+            {/* Legacy Toolbar - Only show if NOT using block editor (or if we want to support mixed mode later) */}
+            {/* For now, we hide it because StructuredEditor has its own toolbar */}
+            {/* {!isVersionHistoryOpen && <div className="no-print"><DocToolbar editor={null} onAddComment={handleAddComment} /></div>} */}
 
             <div className="flex flex-1 overflow-hidden relative print-content-wrapper">
-                {/* Left Sidebar: Outline */}
-                {!isVersionHistoryOpen && <div className="no-print"><DocOutline editor={editorInstance} /></div>}
+                {/* Left Sidebar: Outline - Replaced by StructuredEditor's internal sidebar */}
+                {/* {!isVersionHistoryOpen && <div className="no-print"><DocOutline editor={editorInstance} /></div>} */}
 
                 {/* Main Content Area */}
-                <div className="flex-1 overflow-auto flex flex-col items-center bg-[#f9fbfd] relative print-content-wrapper">
-                    {/* Sticky Ruler */}
-                    {!isVersionHistoryOpen && (
-                        <div className="sticky top-0 z-10 w-full max-w-[816px] no-print">
-                            <Ruler editor={editorInstance} />
-                        </div>
-                    )}
-
-                    {/* Page Container */}
-                    <div className="py-4 px-4 pb-20 print-content-wrapper">
-                        <div className="bg-white shadow-lg w-[816px] min-h-[1056px] mx-auto print-page relative">
-                            <RichTextEditor
-                                content={content}
-                                onChange={(newContent) => {
-                                    if (newContent === content) return;
-                                    if (!isVersionHistoryOpen) {
-                                        setContent(newContent);
-                                        const text = getTextContent(newContent);
-                                        setWordCount(text.length);
-                                    }
-                                }}
-                                editable={canEdit}
-                                onEditorReady={setEditorInstance}
-                            />
-                        </div>
-                    </div>
+                {/* Main Content Area */}
+                <div className="flex-1 overflow-hidden flex flex-col bg-[#f9fbfd] relative print-content-wrapper">
+                    {/* Structured Editor - Full Width/Height */}
+                    <StructuredEditor
+                        ref={structuredEditorRef}
+                        blocks={blocks}
+                        onChange={(newBlocks) => {
+                            setBlocks(newBlocks);
+                            // Update content string for comparison/autosave check
+                            const newHtml = blocksToHtml(newBlocks);
+                            setContent(newHtml);
+                            setWordCount(getTextContent(newHtml).length);
+                        }}
+                        readOnly={!canEdit}
+                        currentUser={currentUser}
+                        docId={id}
+                    />
                 </div>
 
                 {/* Right Sidebar: Version History OR Comment Sidebar */}
-                {isVersionHistoryOpen && (
-                    <div className="no-print">
-                        <VersionHistorySidebar
-                            docId={id}
-                            currentUser={currentUser}
-                            currentVersionId={viewingVersion?.id}
-                            onSelectVersion={(version) => {
-                                setViewingVersion(version);
-                                setContent(version.content);
-                            }}
-                            onClose={() => {
-                                setIsVersionHistoryOpen(false);
-                                setViewingVersion(null);
-                                setContent(lastSavedContent);
-                            }}
-                        />
-                    </div>
-                )}
+                {
+                    isVersionHistoryOpen && (
+                        <div className="no-print">
+                            <VersionHistorySidebar
+                                docId={id}
+                                currentUser={currentUser}
+                                currentVersionId={viewingVersion?.id}
+                                onSelectVersion={(version) => {
+                                    setViewingVersion(version);
+                                    setContent(version.content);
+                                }}
+                                onClose={() => {
+                                    setIsVersionHistoryOpen(false);
+                                    setViewingVersion(null);
+                                    setContent(lastSavedContent);
+                                }}
+                            />
+                        </div>
+                    )
+                }
 
                 {/* Comment Sidebar */}
-                {!isVersionHistoryOpen && isCommentSidebarOpen && (
-                    <div className="no-print border-l border-gray-200">
-                        <CommentSidebar
-                            comments={comments}
-                            currentUser={currentUser}
-                            activeCommentId={activeCommentId}
-                            onAddComment={handleAddComment}
-                            onReply={handleReply}
-                            onResolve={handleResolve}
-                            onDelete={handleDelete}
-                            onClose={() => setIsCommentSidebarOpen(false)}
-                            newCommentDraft={newCommentDraft}
-                            onCancelDraft={() => setNewCommentDraft(null)}
-                            onSubmitDraft={handleSubmitComment}
-                        />
-                    </div>
-                )}
+                {
+                    !isVersionHistoryOpen && isCommentSidebarOpen && (
+                        <div className="no-print border-l border-gray-200">
+                            <CommentSidebar
+                                comments={comments}
+                                currentUser={currentUser}
+                                activeCommentId={activeCommentId}
+                                onAddComment={handleAddComment}
+                                onReply={handleReply}
+                                onResolve={handleResolve}
+                                onDelete={handleDelete}
+                                onClose={() => setIsCommentSidebarOpen(false)}
+                                newCommentDraft={newCommentDraft}
+                                onCancelDraft={() => setNewCommentDraft(null)}
+                                onSubmitDraft={handleSubmitComment}
+                            />
+                        </div>
+                    )
+                }
 
-                {/* Right Sidebar: AI Assistant */}
-                {isAISidebarOpen && !isVersionHistoryOpen && (
-                    <div className="no-print h-full border-l border-gray-200">
-                        <AISidebar
-                            currentUser={currentUser}
-                            currentDoc={{ id, title, content }}
-                            onClose={() => setIsAISidebarOpen(false)}
-                        />
-                    </div>
-                )}
-            </div>
-        </div>
+                {/* AI Sidebar removed - Integrated into StructuredEditor's RightSidebar */}
+            </div >
+        </div >
     );
 }

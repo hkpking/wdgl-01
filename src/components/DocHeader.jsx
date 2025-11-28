@@ -22,6 +22,8 @@ export default function DocHeader({
     editor,
     onOpenVersionHistory,
     onImport, // New prop for import handler
+    onInsertBlock, // New prop for block insertion
+    content, // New prop for export fallback
     children // Accept children for custom buttons (like AI Assistant)
 }) {
     const menus = ['文件', '编辑', '查看', '插入', '格式', '工具', '扩展程序', '帮助'];
@@ -37,7 +39,7 @@ export default function DocHeader({
     const currentUser = mockStorage.getCurrentUser();
 
     // Use custom hook for export
-    const { exportAsPDF, exportAsMarkdown } = useDocumentExport();
+    const { exportAsPDF, exportAsMarkdown, exportAsWord } = useDocumentExport();
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -54,10 +56,14 @@ export default function DocHeader({
 
     const handleImageUpload = async (e) => {
         const file = e.target.files[0];
-        if (file && editor) {
+        if (file) {
             try {
                 const url = await uploadImage(file, currentUser?.uid);
-                editor.chain().focus().setImage({ src: url }).run();
+                if (onInsertBlock) {
+                    onInsertBlock('image', { src: url });
+                } else if (editor) {
+                    editor.chain().focus().setImage({ src: url }).run();
+                }
             } catch (error) {
                 console.error("Upload failed:", error);
                 alert("图片上传失败");
@@ -82,15 +88,30 @@ export default function DocHeader({
 
     const addImageViaUrl = () => {
         const url = window.prompt('请输入图片 URL:');
-        if (url && editor) {
-            editor.chain().focus().setImage({ src: url }).run();
+        if (url) {
+            if (onInsertBlock) {
+                onInsertBlock('image', { src: url });
+            } else if (editor) {
+                editor.chain().focus().setImage({ src: url }).run();
+            }
             setActiveMenu(null);
         }
     };
 
     const setLink = () => {
-        if (linkUrl && editor) {
-            editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl }).run();
+        if (linkUrl) {
+            if (onInsertBlock) {
+                // Block editor might not support inline links easily yet, or we insert a link block?
+                // For now, maybe just alert or try to insert a process link if it matches?
+                // Or if we have a 'paragraph' block with link support?
+                // The current block editor is block-based.
+                // Let's assume we can't easily do inline links in the block editor without more work.
+                // But we can insert a 'process_link' block if that's what they mean?
+                // Or maybe just skip for now or add a generic 'clause' with the link text?
+                alert('当前编辑器暂不支持插入行内链接，请使用“流程挂载”功能');
+            } else if (editor) {
+                editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl }).run();
+            }
             setLinkUrl('');
             setShowLinkInput(false);
             setActiveMenu(null);
@@ -103,7 +124,12 @@ export default function DocHeader({
     };
 
     const handleDownloadMarkdown = () => {
-        exportAsMarkdown(editor, title);
+        exportAsMarkdown(editor, title, content); // Pass content as fallback
+        setActiveMenu(null);
+    };
+
+    const handleDownloadWord = () => {
+        exportAsWord(editor, title, content);
         setActiveMenu(null);
     };
 
@@ -139,6 +165,13 @@ export default function DocHeader({
                     >
                         <FileJson size={18} />
                         <span>Markdown (.md)</span>
+                    </button>
+                    <button
+                        className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 rounded text-left text-sm w-full"
+                        onClick={handleDownloadWord}
+                    >
+                        <FileText size={18} />
+                        <span>Word 文档 (.docx)</span>
                     </button>
                 </div>
             </div>
@@ -220,11 +253,15 @@ export default function DocHeader({
                                         onMouseEnter={() => setTableSize({ rows: row, cols: col })}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            editor?.chain().focus().insertTable({
-                                                rows: row,
-                                                cols: col,
-                                                withHeaderRow: true
-                                            }).run();
+                                            if (onInsertBlock) {
+                                                onInsertBlock('table', { rows: row, cols: col });
+                                            } else if (editor) {
+                                                editor.chain().focus().insertTable({
+                                                    rows: row,
+                                                    cols: col,
+                                                    withHeaderRow: true
+                                                }).run();
+                                            }
                                             setActiveMenu(null);
                                             setShowTablePicker(false);
                                             setTableSize({ rows: 0, cols: 0 });
@@ -250,14 +287,18 @@ export default function DocHeader({
                     <button
                         className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 rounded text-left text-sm w-full"
                         onClick={() => {
-                            editor?.chain().focus().insertContent({
-                                type: 'flowchart',
-                                attrs: {
-                                    data: { cells: [] },
-                                    width: '100%',
-                                    height: '500px',
-                                },
-                            }).run();
+                            if (onInsertBlock) {
+                                onInsertBlock('flowchart');
+                            } else if (editor) {
+                                editor.chain().focus().insertContent({
+                                    type: 'flowchart',
+                                    attrs: {
+                                        data: { cells: [] },
+                                        width: '100%',
+                                        height: '500px',
+                                    },
+                                }).run();
+                            }
                             setActiveMenu(null);
                         }}
                     >
@@ -284,7 +325,14 @@ export default function DocHeader({
             <button
                 className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 rounded text-left text-sm w-full"
                 onClick={() => {
-                    editor?.chain().focus().setHorizontalRule().run();
+                    if (onInsertBlock) {
+                        // Insert a separator block or just a generic one?
+                        // For now, let's insert a rule block as it's visually distinct?
+                        // Or just alert not supported yet.
+                        alert('暂不支持插入水平线');
+                    } else if (editor) {
+                        editor.chain().focus().setHorizontalRule().run();
+                    }
                     setActiveMenu(null);
                 }}
             >
@@ -296,7 +344,13 @@ export default function DocHeader({
             <button
                 className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 rounded text-left text-sm w-full"
                 onClick={() => {
-                    editor?.chain().focus().toggleCodeBlock().run();
+                    if (onInsertBlock) {
+                        // Insert a code block? We don't have a code block type yet.
+                        // Maybe insert a generic clause with code styling?
+                        alert('暂不支持插入代码块');
+                    } else if (editor) {
+                        editor.chain().focus().toggleCodeBlock().run();
+                    }
                     setActiveMenu(null);
                 }}
             >

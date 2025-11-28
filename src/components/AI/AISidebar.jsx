@@ -3,7 +3,7 @@ import { Sparkles, X, Send, Paperclip, FileText, Shield, Bot, User } from 'lucid
 import SourceSelector from './SourceSelector';
 import * as mockStorage from '../../services/mockStorage';
 
-export default function AISidebar({ currentUser, currentDoc, onClose }) {
+export default function AISidebar({ currentUser, currentDoc, onClose, embedded = false }) {
     const [messages, setMessages] = useState([
         { id: 'welcome', role: 'ai', content: '你好！我是您的 AI 助手。我可以帮您总结文档、回答问题，或者查询系统知识库。' }
     ]);
@@ -85,17 +85,19 @@ export default function AISidebar({ currentUser, currentDoc, onClose }) {
     };
 
     return (
-        <div className="w-96 bg-white border-l border-gray-200 h-full flex flex-col shadow-xl z-30 flex-shrink-0">
-            {/* Header */}
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-blue-50 to-purple-50">
-                <div className="flex items-center gap-2 text-blue-700">
-                    <Sparkles size={20} />
-                    <h2 className="font-semibold">AI 助手</h2>
+        <div className={`${embedded ? 'w-full h-full border-none shadow-none' : 'w-96 bg-white border-l border-gray-200 shadow-xl'} flex flex-col z-30 flex-shrink-0`}>
+            {/* Header - Only show if not embedded */}
+            {!embedded && (
+                <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-blue-50 to-purple-50">
+                    <div className="flex items-center gap-2 text-blue-700">
+                        <Sparkles size={20} />
+                        <h2 className="font-semibold">AI 助手</h2>
+                    </div>
+                    <button onClick={onClose} className="p-1 hover:bg-white/50 rounded-full text-gray-500">
+                        <X size={18} />
+                    </button>
                 </div>
-                <button onClick={onClose} className="p-1 hover:bg-white/50 rounded-full text-gray-500">
-                    <X size={18} />
-                </button>
-            </div>
+            )}
 
             {/* Sources Area */}
             <div className="p-3 bg-gray-50 border-b border-gray-200">
