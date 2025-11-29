@@ -59,7 +59,7 @@ export default function CommentSidebar({
                         <div className="text-xs font-medium text-gray-500 mb-2">添加新评论</div>
                         {newCommentDraft.quote && (
                             <div className="mb-2 pl-2 border-l-2 border-yellow-400 text-xs text-gray-500 italic truncate">
-                                "{newCommentDraft.quote}"
+                                &quot;{newCommentDraft.quote}&quot;
                             </div>
                         )}
                         <form onSubmit={(e) => {

@@ -47,7 +47,7 @@ export default function CommentThread({ comment, currentUser, onReply, onResolve
                 {/* Quote Context */}
                 {comment.quote && (
                     <div className="mb-2 pl-2 border-l-2 border-yellow-400 text-xs text-gray-500 italic truncate">
-                        "{comment.quote}"
+                        &quot;{comment.quote}&quot;
                     </div>
                 )}
 

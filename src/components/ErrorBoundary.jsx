@@ -7,24 +7,34 @@ class ErrorBoundary extends React.Component {
     }
 
     static getDerivedStateFromError(error) {
-        return { hasError: true };
+        return { hasError: true, error };
     }
 
     componentDidCatch(error, errorInfo) {
-        this.setState({ error, errorInfo });
         console.error("Uncaught error:", error, errorInfo);
+        this.setState({ errorInfo });
     }
 
     render() {
         if (this.state.hasError) {
             return (
-                <div className="p-4 bg-red-50 border border-red-200 rounded text-red-800">
-                    <h2 className="text-lg font-bold mb-2">Something went wrong.</h2>
-                    <details className="whitespace-pre-wrap">
-                        {this.state.error && this.state.error.toString()}
-                        <br />
-                        {this.state.errorInfo && this.state.errorInfo.componentStack}
-                    </details>
+                <div className="p-8 max-w-2xl mx-auto mt-10 bg-red-50 border border-red-200 rounded-lg">
+                    <h1 className="text-2xl font-bold text-red-700 mb-4">出错了 (Something went wrong)</h1>
+                    <p className="text-red-600 mb-4">应用程序遇到错误，无法继续运行。</p>
+                    <div className="bg-white p-4 rounded border border-red-100 overflow-auto max-h-96">
+                        <p className="font-mono text-sm text-red-500 font-bold mb-2">
+                            {this.state.error && this.state.error.toString()}
+                        </p>
+                        <pre className="font-mono text-xs text-gray-600 whitespace-pre-wrap">
+                            {this.state.errorInfo && this.state.errorInfo.componentStack}
+                        </pre>
+                    </div>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="mt-6 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                    >
+                        刷新页面
+                    </button>
                 </div>
             );
         }

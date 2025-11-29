@@ -1,23 +1,31 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-// Mock 模式下暂时不使用认证
-// import { AuthProvider } from './contexts/AuthContext';
-// import PrivateRoute from './components/PrivateRoute';
-import Dashboard from './pages/Dashboard';
-import Editor from './pages/Editor';
-import ProcessViewer from './pages/ProcessViewer';
+import { StorageProvider } from './contexts/StorageContext';
+
+import ErrorBoundary from './components/ErrorBoundary';
+
+// Lazy load components for performance optimization
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Editor = lazy(() => import('./pages/Editor'));
+const ProcessViewer = lazy(() => import('./pages/ProcessViewer'));
 
 function App() {
     return (
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-            <Routes>
-                {/* Mock 模式下直接访问,不需要登录 */}
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/editor/:id" element={<Editor />} />
-                <Route path="/view/:id" element={<ProcessViewer />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-        </Router>
+        <StorageProvider>
+            <ErrorBoundary>
+                <Router>
+                    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                        <Routes>
+                            {/* Mock 模式下直接访问,不需要登录 */}
+                            <Route path="/" element={<Dashboard />} />
+                            <Route path="/editor/:id" element={<Editor />} />
+                            <Route path="/view/:id" element={<ProcessViewer />} />
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                        </Routes>
+                    </Suspense>
+                </Router>
+            </ErrorBoundary>
+        </StorageProvider>
     );
 }
 

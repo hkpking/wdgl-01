@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     GripVertical, X, Image as ImageIcon, Workflow, Edit, Hash,
     FileText, AlertTriangle, Shield, GitGraph, Trash2,
@@ -109,15 +109,19 @@ const BlockMenu = ({ isOpen, onClose, position, onAction }) => {
     );
 };
 
+import { aiService } from '../../services/ai/AIService';
+
 export default function BlockItem({ block, isSelected, onSelect, onChange, onDelete, onDuplicate, onInsertAfter, readOnly }) {
     const [isHovered, setIsHovered] = useState(false);
     const [isDrawioOpen, setIsDrawioOpen] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [isCompact, setIsCompact] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [ghostText, setGhostText] = useState('');
     const menuButtonRef = useRef(null);
     const contentRef = useRef(null);
     const exportRef = useRef(null);
+    const debounceTimer = useRef(null);
 
     const {
         attributes,
@@ -185,8 +189,56 @@ export default function BlockItem({ block, isSelected, onSelect, onChange, onDel
 
     const handleContentChange = (e) => {
         if (readOnly) return;
-        // Use innerHTML to preserve rich text
-        onChange({ ...block, content: e.currentTarget.innerHTML });
+
+        const newContent = e.currentTarget.innerHTML;
+        // Remove ghost text span if it exists in the HTML before saving
+        const cleanContent = newContent.replace(/<span[^>]*data-ghost="true"[^>]*>.*?<\/span>/g, '');
+
+        onChange({ ...block, content: cleanContent });
+
+        // Trigger Autocomplete
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        setGhostText(''); // Clear old ghost text on typing
+
+        // Only trigger if content is plain text (no complex HTML) and length > 5
+        const plainText = e.currentTarget.textContent;
+        if (plainText.length > 5 && !plainText.endsWith('.')) {
+            debounceTimer.current = setTimeout(async () => {
+                const suggestion = await aiService.generateCompletion(plainText);
+                if (suggestion && isSelected) {
+                    setGhostText(suggestion);
+                }
+            }, 1000); // 1s debounce
+        }
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Tab' && ghostText) {
+            e.preventDefault();
+            // Accept ghost text
+            const newContent = block.content + ghostText;
+            onChange({ ...block, content: newContent });
+            setGhostText('');
+
+            // Move cursor to end (simplified, might need range manipulation)
+            setTimeout(() => {
+                if (contentRef.current) {
+                    const range = document.createRange();
+                    const sel = window.getSelection();
+                    range.selectNodeContents(contentRef.current);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            }, 0);
+        } else if (ghostText) {
+            setGhostText('');
+        }
+
+        if (e.key === 'Backspace' && !block.content) {
+            e.preventDefault();
+            onDelete(block.id);
+        }
     };
 
     const handleMenuAction = (action) => {
@@ -681,15 +733,9 @@ export default function BlockItem({ block, isSelected, onSelect, onChange, onDel
                             contentEditable={!readOnly}
                             suppressContentEditableWarning
                             onBlur={handleContentChange}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Backspace' && !block.content) {
-                                    e.preventDefault();
-                                    // Only delete if empty
-                                    onDelete(block.id);
-                                }
-                            }}
+                            onKeyDown={handleKeyDown}
                             className="flex-1 outline-none"
-                            dangerouslySetInnerHTML={{ __html: block.content }}
+                            dangerouslySetInnerHTML={{ __html: block.content + (ghostText && isSelected ? `<span data-ghost="true" class="text-gray-400 pointer-events-none select-none">${ghostText}</span>` : '') }}
                         />
                     </div>
                 )}

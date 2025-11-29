@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Search, LogOut, Trash2, Edit, Edit2, Eye, LayoutGrid, List as ListIcon, FolderPlus, MoreVertical, FileText, FolderInput } from 'lucide-react';
+import { Plus, Search, LogOut, Trash2, Edit, Edit2, Eye, LayoutGrid, List as ListIcon, FolderPlus, MoreVertical, FileText, FolderInput, Folder } from 'lucide-react';
 import { getTextContent } from '../utils/editor';
 import * as mockStorage from '../services/mockStorage';
 import { DOC_STATUS, STATUS_LABELS, STATUS_COLORS } from '../utils/constants';

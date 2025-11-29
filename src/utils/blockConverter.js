@@ -249,6 +249,7 @@ export function blocksToHtml(blocks) {
     }).join('');
 }
 
+
 function escapeHtml(text) {
     if (!text) return '';
     return text
@@ -257,4 +258,63 @@ function escapeHtml(text) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+/**
+ * Convert Markdown string to Blocks array (Simple implementation for AI)
+ * @param {string} markdown 
+ * @returns {Array} blocks
+ */
+export function markdownToBlocks(markdown) {
+    if (!markdown) return [];
+
+    const lines = markdown.split('\n');
+    const blocks = [];
+
+    lines.forEach(line => {
+        // Calculate indent from original line (assuming 2 spaces or 1 tab = 1 level)
+        const leadingSpaces = line.match(/^\s*/)[0];
+        const indentLevel = Math.floor(leadingSpaces.replace(/\t/g, '  ').length / 2);
+
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        let type = 'clause';
+        let content = trimmed;
+        let level = 1;
+        let number = '';
+
+        // Headings
+        const headingMatch = trimmed.match(/^(#+)\s+(.*)/);
+        if (headingMatch) {
+            type = 'heading';
+            level = headingMatch[1].length;
+            content = headingMatch[2];
+        }
+        // Unordered Lists
+        else if (trimmed.match(/^[-*]\s/)) {
+            content = trimmed.replace(/^[-*]\s/, '');
+            // List items are naturally clauses, indent is handled above
+        }
+        // Ordered Lists
+        else if (trimmed.match(/^\d+(\.\d+)*\.?\s/)) {
+            const match = trimmed.match(/^(\d+(\.\d+)*\.?)\s+(.*)/);
+            if (match) {
+                number = match[1]; // Keep the number string
+                content = match[3];
+            }
+        }
+
+        blocks.push({
+            id: `BLK-${Math.random().toString(36).substr(2, 9)}`,
+            type: type,
+            level: type === 'heading' ? level : undefined,
+            indent: indentLevel,
+            number: number,
+            content: content,
+            meta: {}
+        });
+    });
+
+    return blocks;
 }

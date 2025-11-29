@@ -11,7 +11,9 @@ import CommentSidebar from '../components/Comments/CommentSidebar';
 import AISidebar from '../components/AI/AISidebar';
 import { getTextContent, isPlainText, plainTextToHtml } from '../utils/editor';
 import { htmlToBlocks, blocksToHtml } from '../utils/blockConverter';
-import * as mockStorage from '../services/mockStorage';
+import { useStorage } from '../contexts/StorageContext';
+import { useDocumentData } from '../hooks/useDocumentData';
+import { useAutoSave } from '../hooks/useAutoSave';
 import { DOC_STATUS, STATUS_LABELS } from '../utils/constants';
 
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
@@ -23,17 +25,14 @@ export default function Editor() {
     const navigate = useNavigate();
 
     // 使用 mock 用户
-    const currentUser = mockStorage.getCurrentUser();
+    const storage = useStorage();
+    const currentUser = storage.getCurrentUser();
 
     const [title, setTitle] = useState('');
     const [content, setContent] = useState(''); // Keep for backward compatibility / export
     const [blocks, setBlocks] = useState([]); // New block state
     const [status, setStatus] = useState(DOC_STATUS.DRAFT);
-    const [saving, setSaving] = useState(false);
-    const [lastSaved, setLastSaved] = useState(null);
     const [wordCount, setWordCount] = useState(0);
-    const [lastSavedContent, setLastSavedContent] = useState('');
-    const [lastSavedTitle, setLastSavedTitle] = useState('');
     // const [editorInstance, setEditorInstance] = useState(null); // No longer using Tiptap instance directly
 
     // Version History State
@@ -50,115 +49,33 @@ export default function Editor() {
     const [activeCommentId, setActiveCommentId] = useState(null);
     const [newCommentDraft, setNewCommentDraft] = useState(null);
 
-    // Load document and comments if ID exists
+    // Document Data Hook
+    const { document: loadedDoc, loading, error, reload } = useDocumentData(id, currentUser);
+
     useEffect(() => {
-        // Get current user inside effect to avoid dependency issues
-        const user = mockStorage.getCurrentUser();
-        if (!id || !user) return;
-
-        const loadDoc = () => {
-            console.log('[LOAD] Loading document:', id);
-            const doc = mockStorage.getDocument(user.uid, id);
-
-            if (doc) {
-                console.log('[LOAD] Document found:', doc);
-                setTitle(doc.title || '');
-                setLastSavedTitle(doc.title || '');
-                setStatus(doc.status || DOC_STATUS.DRAFT);
-
-                // Handle content loading
-                let loadedContent = doc.content || '';
-                let loadedBlocks = [];
-
-                if (doc.contentType === 'blocks' && Array.isArray(doc.blocks)) {
-                    loadedBlocks = doc.blocks;
-                    loadedContent = blocksToHtml(loadedBlocks); // Generate HTML for preview/export
-                } else {
-                    // Legacy HTML or Plain Text
-                    if (isPlainText(loadedContent)) {
-                        loadedContent = plainTextToHtml(loadedContent);
-                    }
-                    loadedBlocks = htmlToBlocks(loadedContent);
-                }
-
-                setContent(loadedContent);
-                setBlocks(loadedBlocks);
-                setLastSavedContent(loadedContent);
-                setLastSaved(doc.updatedAt ? new Date(doc.updatedAt) : (doc.createdAt ? new Date(doc.createdAt) : null));
-
-                // Load Comments
-                const loadedComments = mockStorage.getComments(user.uid, id);
-                setComments(loadedComments);
-            } else {
-                console.log('[LOAD] Document not found, redirecting to home');
-                navigate('/');
-            }
-        };
-
-        loadDoc();
-    }, [id, navigate]);
-
-    // Auto-save effect
-    useEffect(() => {
-        if (!id || isVersionHistoryOpen) return; // Don't auto-save in version history mode
-
-        const timer = setTimeout(() => {
-            if (content !== lastSavedContent || title !== lastSavedTitle) {
-                handleSave();
-            }
-        }, 3000);
-
-        return () => clearTimeout(timer);
-    }, [content, title, status, lastSavedContent, lastSavedTitle, isVersionHistoryOpen]);
-
-    // Browser close warning
-    useEffect(() => {
-        const handleBeforeUnload = (e) => {
-            if (content !== lastSavedContent || title !== lastSavedTitle) {
-                e.preventDefault();
-                e.returnValue = '';
-            }
-        };
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [content, lastSavedContent, title, lastSavedTitle]);
-
-    const handleSave = async () => {
-        if (!title.trim()) return;
-
-        setSaving(true);
-        try {
-            const htmlContent = blocksToHtml(blocks);
-            const docData = {
-                title,
-                content: htmlContent, // Save HTML representation
-                blocks: blocks,       // Save structured blocks
-                status,
-                contentType: 'blocks'
-            };
-
-            console.log('[SAVE] Saving document:', docData);
-            mockStorage.saveDocument(currentUser.uid, id, docData);
-
-            setLastSaved(new Date());
-            setLastSavedContent(content);
-            setLastSavedTitle(title);
-
-            // Save version history
-            mockStorage.saveVersion(currentUser.uid, id, {
-                title,
-                content: htmlContent,
-                blocks: blocks,
-                status
-            });
-
-        } catch (error) {
-            console.error('[SAVE] Error saving:', error);
-            alert(error.message);
-        } finally {
-            setSaving(false);
+        if (loadedDoc) {
+            setTitle(loadedDoc.title || '');
+            setContent(loadedDoc.content || '');
+            setBlocks(loadedDoc.blocks || []);
+            setStatus(loadedDoc.status || DOC_STATUS.DRAFT);
+            // Load Comments
+            const loadedComments = storage.getComments(currentUser.uid, id);
+            setComments(loadedComments);
         }
-    };
+    }, [loadedDoc, id, currentUser?.uid, storage]);
+
+    // Auto Save Hook
+    const documentState = React.useMemo(() => ({ title, blocks, status }), [title, blocks, status]);
+    const { saving, lastSaved, handleSave, isDirty } = useAutoSave(
+        id,
+        currentUser,
+        documentState,
+        isVersionHistoryOpen
+    );
+
+    useEffect(() => {
+        console.log('[Editor] Render');
+    });
 
     const handleImport = async (file) => {
         try {
@@ -204,7 +121,7 @@ export default function Editor() {
             }
         };
 
-        const newComment = mockStorage.addComment(currentUser.uid, id, commentData);
+        const newComment = storage.addComment(currentUser.uid, id, commentData);
         setComments([...comments, newComment]);
 
         // Add Mark to Editor - Disabled for Block Editor
@@ -223,7 +140,7 @@ export default function Editor() {
                 name: currentUser.displayName || currentUser.email
             }
         };
-        const newReply = mockStorage.addReply(currentUser.uid, id, commentId, replyData);
+        const newReply = storage.addReply(currentUser.uid, id, commentId, replyData);
 
         // Update local state
         setComments(comments.map(c => {
@@ -235,13 +152,13 @@ export default function Editor() {
     };
 
     const handleResolve = (commentId) => {
-        const updatedComment = mockStorage.updateCommentStatus(currentUser.uid, id, commentId, 'resolved');
+        const updatedComment = storage.updateCommentStatus(currentUser.uid, id, commentId, 'resolved');
         setComments(comments.map(c => c.id === commentId ? updatedComment : c));
     };
 
     const handleDelete = (commentId) => {
         if (window.confirm('确定要删除这条评论吗？')) {
-            mockStorage.deleteComment(currentUser.uid, id, commentId);
+            storage.deleteComment(currentUser.uid, id, commentId);
             setComments(comments.filter(c => c.id !== commentId));
 
             // Remove Mark from Editor (This is tricky without knowing exact range, 
@@ -271,7 +188,7 @@ export default function Editor() {
     });
 
     const handleBack = () => {
-        if (content !== lastSavedContent) {
+        if (isDirty) {
             if (window.confirm('您有未保存的更改，确定要离开吗？')) {
                 navigate('/');
             }
@@ -291,7 +208,7 @@ export default function Editor() {
 
         if (window.confirm('确定要还原到此版本吗？当前未保存的更改将会丢失。')) {
             setContent(viewingVersion.content);
-            setLastSavedContent(viewingVersion.content); // Treat as saved to avoid overwrite warning
+            // setLastSavedContent(viewingVersion.content); // Removed
             setIsVersionHistoryOpen(false);
             setViewingVersion(null);
 
@@ -302,9 +219,12 @@ export default function Editor() {
                     status,
                     contentType: 'html'
                 };
-                mockStorage.saveDocument(currentUser.uid, id, docData);
-                mockStorage.saveVersion(currentUser.uid, id, { title, content: viewingVersion.content, status });
-                setLastSaved(new Date());
+                storage.saveDocument(currentUser.uid, id, docData);
+                storage.saveVersion(currentUser.uid, id, { title, content: viewingVersion.content, status });
+                // Note: setLastSaved is now handled by useAutoSave, but here we are doing manual restore.
+                // We might need to force a reload or update state.
+                // For now, simple reload might be safest or just let auto-save pick it up.
+                window.location.reload();
             }, 100);
         }
     };
@@ -327,7 +247,7 @@ export default function Editor() {
                     <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Clock size={32} />
                     </div>
-                    <h2 className="text-xl font-bold text-gray-900 mb-2">文档处于"{STATUS_LABELS[status]}"状态</h2>
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">文档处于&quot;{STATUS_LABELS[status]}&quot;状态</h2>
                     <p className="text-gray-600 mb-6">当前状态下无法直接编辑。如需修改，请先撤回或创建新版本。</p>
                     <div className="flex gap-4 justify-center">
                         <button
@@ -358,7 +278,7 @@ export default function Editor() {
                             onClick={() => {
                                 setIsVersionHistoryOpen(false);
                                 setViewingVersion(null);
-                                setContent(lastSavedContent);
+                                reload();
                             }}
                             className="text-gray-600 hover:bg-gray-100 p-2 rounded transition"
                         >
@@ -452,7 +372,7 @@ export default function Editor() {
                                 onClose={() => {
                                     setIsVersionHistoryOpen(false);
                                     setViewingVersion(null);
-                                    setContent(lastSavedContent);
+                                    reload();
                                 }}
                             />
                         </div>

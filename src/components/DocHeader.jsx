@@ -381,6 +381,7 @@ export default function DocHeader({
                             onChange={(e) => setTitle(e.target.value)}
                             className="text-lg font-medium text-gray-800 border border-transparent hover:border-gray-400 focus:border-blue-500 focus:bg-white rounded px-2 py-0.5 outline-none transition-all w-64"
                             placeholder="无标题文档"
+                            data-testid="doc-title-input"
                         />
                         <button className="text-gray-500 hover:text-gray-800 hover:bg-gray-100 p-1 rounded-full">
                             <Star size={18} />
@@ -388,7 +389,10 @@ export default function DocHeader({
 
                         {/* Status Badge */}
                         {status && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[status]}`}>
+                            <span
+                                className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[status]}`}
+                                data-testid="doc-status-badge"
+                            >
                                 {STATUS_LABELS[status]}
                             </span>
                         )}
@@ -451,6 +455,7 @@ export default function DocHeader({
                     <button
                         onClick={onShare}
                         className="flex items-center gap-2 bg-[#c2e7ff] hover:shadow-md text-[#001d35] px-6 py-2 rounded-full transition-all font-medium text-sm"
+                        data-testid="share-button"
                     >
                         <Lock size={18} />
                         <span>共享</span>

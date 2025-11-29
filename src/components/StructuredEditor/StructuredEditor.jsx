@@ -14,16 +14,19 @@ import {
     sortableKeyboardCoordinates,
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import { markdownToBlocks } from '../../utils/blockConverter';
 
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
 import BlockItem from './BlockItem';
 import EditorToolbar from './EditorToolbar';
+import MagicCommand from '../AI/MagicCommand';
 
 const StructuredEditor = React.forwardRef(({ blocks, onChange, readOnly, currentUser, docId }, ref) => {
     const [selectedId, setSelectedId] = useState(null);
     const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
     const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+    const [isMagicCommandOpen, setIsMagicCommandOpen] = useState(false);
     const rightSidebarRef = useRef(null);
 
     const [activeTab, setActiveTab] = useState('properties');
@@ -80,6 +83,9 @@ const StructuredEditor = React.forwardRef(({ blocks, onChange, readOnly, current
             } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
                 e.preventDefault();
                 redo();
+            } else if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                setIsMagicCommandOpen(true);
             }
         };
 
@@ -367,8 +373,33 @@ const StructuredEditor = React.forwardRef(({ blocks, onChange, readOnly, current
                 currentUser={currentUser}
                 docId={docId}
             />
+            {/* Magic Command Overlay */}
+            <MagicCommand
+                isOpen={isMagicCommandOpen}
+                onClose={() => setIsMagicCommandOpen(false)}
+                onInsert={(text) => {
+                    const generatedBlocks = markdownToBlocks(text);
+                    let newBlocksList;
+                    if (selectedId) {
+                        const index = internalBlocks.findIndex(b => b.id === selectedId);
+                        newBlocksList = [
+                            ...internalBlocks.slice(0, index + 1),
+                            ...generatedBlocks,
+                            ...internalBlocks.slice(index + 1)
+                        ];
+                    } else {
+                        newBlocksList = [...internalBlocks, ...generatedBlocks];
+                    }
+                    addToHistory(newBlocksList);
+                    if (generatedBlocks.length > 0) {
+                        setSelectedId(generatedBlocks[generatedBlocks.length - 1].id);
+                    }
+                }}
+            />
         </div>
     );
 });
+
+StructuredEditor.displayName = 'StructuredEditor';
 
 export default StructuredEditor;
