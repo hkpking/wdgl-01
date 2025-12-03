@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Clock, ArrowLeft, RotateCcw, MessageSquarePlus, Sparkles } from 'lucide-react';
+import RichTextEditor from '../components/RichTextEditor';
 import StructuredEditor from '../components/StructuredEditor/StructuredEditor';
 import DocHeader from '../components/DocHeader';
 import DocToolbar from '../components/DocToolbar';
-// import DocOutline from '../components/DocOutline'; // Replaced by internal sidebar
-// import Ruler from '../components/Ruler'; // Not needed for block editor
+import DocOutline from '../components/DocOutline';
+// import Ruler from '../components/Ruler';
 import VersionHistorySidebar from '../components/VersionHistorySidebar';
 import CommentSidebar from '../components/Comments/CommentSidebar';
 import AISidebar from '../components/AI/AISidebar';
+import MagicCommand from '../components/AI/MagicCommand';
 import { getTextContent, isPlainText, plainTextToHtml } from '../utils/editor';
 import { htmlToBlocks, blocksToHtml } from '../utils/blockConverter';
 import { useStorage } from '../contexts/StorageContext';
@@ -33,7 +35,7 @@ export default function Editor() {
     const [blocks, setBlocks] = useState([]); // New block state
     const [status, setStatus] = useState(DOC_STATUS.DRAFT);
     const [wordCount, setWordCount] = useState(0);
-    // const [editorInstance, setEditorInstance] = useState(null); // No longer using Tiptap instance directly
+    const [editorInstance, setEditorInstance] = useState(null);
 
     // Version History State
     const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
@@ -46,6 +48,7 @@ export default function Editor() {
     const [comments, setComments] = useState([]);
     const [isCommentSidebarOpen, setIsCommentSidebarOpen] = useState(false);
     const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
+    const [isMagicCommandOpen, setIsMagicCommandOpen] = useState(false);
     const [activeCommentId, setActiveCommentId] = useState(null);
     const [newCommentDraft, setNewCommentDraft] = useState(null);
 
@@ -64,8 +67,22 @@ export default function Editor() {
         }
     }, [loadedDoc, id, currentUser?.uid, storage]);
 
+    // Update browser tab title
+    useEffect(() => {
+        if (title) {
+            document.title = `${title} - 在线文档系统`;
+        } else {
+            document.title = '在线文档系统';
+        }
+
+        // Cleanup on unmount
+        return () => {
+            document.title = '在线文档系统';
+        };
+    }, [title]);
+
     // Auto Save Hook
-    const documentState = React.useMemo(() => ({ title, blocks, status }), [title, blocks, status]);
+    const documentState = React.useMemo(() => ({ title, content, status }), [title, content, status]);
     const { saving, lastSaved, handleSave, isDirty } = useAutoSave(
         id,
         currentUser,
@@ -172,10 +189,8 @@ export default function Editor() {
     };
 
     const toggleAISidebar = () => {
-        // Open AI tab in StructuredEditor
-        if (structuredEditorRef.current) {
-            structuredEditorRef.current.openAITab();
-        }
+        setIsAISidebarOpen(!isAISidebarOpen);
+        if (!isAISidebarOpen) setIsCommentSidebarOpen(false);
     };
 
     // Keyboard Shortcuts
@@ -235,8 +250,35 @@ export default function Editor() {
     const structuredEditorRef = useRef(null);
 
     const handleInsertBlock = (type, meta) => {
-        if (structuredEditorRef.current) {
-            structuredEditorRef.current.addBlock(type, meta);
+        if (editorInstance) {
+            if (type === 'flowchart') {
+                editorInstance.chain().focus().insertContent({
+                    type: 'flowchart',
+                    attrs: {
+                        xml: null,
+                        previewUrl: null,
+                        width: '100%',
+                        height: '500px',
+                    }
+                }).run();
+            } else if (type === 'image' && meta?.src) {
+                editorInstance.chain().focus().setImage({ src: meta.src }).run();
+            } else if (type === 'table' && meta?.rows && meta?.cols) {
+                editorInstance.chain().focus().insertTable({
+                    rows: meta.rows,
+                    cols: meta.cols,
+                    withHeaderRow: true
+                }).run();
+            }
+        }
+    };
+
+    const handleMagicInsert = (text) => {
+        if (editorInstance) {
+            // Insert text at current selection
+            // If it looks like markdown, we might want to parse it, but for now just insert text
+            // Tiptap's insertContent handles HTML or text
+            editorInstance.chain().focus().insertContent(text).run();
         }
     };
 
@@ -316,7 +358,7 @@ export default function Editor() {
                     onImport={handleImport}
                     onInsertBlock={handleInsertBlock} // Pass insert handler
                     content={content} // Pass content for export
-                    editor={null} // Removed editor instance
+                    editor={editorInstance}
                 >
                     <button
                         onClick={toggleAISidebar}
@@ -329,35 +371,43 @@ export default function Editor() {
                 </DocHeader>
             )}
 
-            {/* Legacy Toolbar - Only show if NOT using block editor (or if we want to support mixed mode later) */}
-            {/* For now, we hide it because StructuredEditor has its own toolbar */}
-            {/* {!isVersionHistoryOpen && <div className="no-print"><DocToolbar editor={null} onAddComment={handleAddComment} /></div>} */}
+            {/* Legacy Toolbar - Restored */}
+            {!isVersionHistoryOpen && <div className="no-print"><DocToolbar editor={editorInstance} onAddComment={handleAddComment} /></div>}
 
             <div className="flex flex-1 overflow-hidden relative print-content-wrapper">
-                {/* Left Sidebar: Outline - Replaced by StructuredEditor's internal sidebar */}
-                {/* {!isVersionHistoryOpen && <div className="no-print"><DocOutline editor={editorInstance} /></div>} */}
+                {/* Left Sidebar: Outline */}
+                {!isVersionHistoryOpen && <div className="no-print"><DocOutline editor={editorInstance} /></div>}
 
                 {/* Main Content Area */}
-                {/* Main Content Area */}
-                <div className="flex-1 overflow-hidden flex flex-col bg-[#f9fbfd] relative print-content-wrapper">
-                    {/* Structured Editor - Full Width/Height */}
-                    <StructuredEditor
-                        ref={structuredEditorRef}
-                        blocks={blocks}
-                        onChange={(newBlocks) => {
-                            setBlocks(newBlocks);
-                            // Update content string for comparison/autosave check
-                            const newHtml = blocksToHtml(newBlocks);
-                            setContent(newHtml);
-                            setWordCount(getTextContent(newHtml).length);
-                        }}
-                        readOnly={!canEdit}
-                        currentUser={currentUser}
-                        docId={id}
-                    />
+                <div className="flex-1 overflow-y-auto flex flex-col items-center bg-[#F8F9FA] relative print-content-wrapper p-8">
+
+                    {/* Page Container */}
+                    <div className="bg-white shadow-sm flex flex-col" style={{ width: '816px', minHeight: '1123px' }}>
+                        {/* Ruler Removed per user request */}
+                        {/* <Ruler editor={editorInstance} /> */}
+
+                        {/* Editor Area */}
+                        <div className="flex-1">
+                            <RichTextEditor
+                                content={content}
+                                onChange={setContent}
+                                editable={canEdit}
+                                onEditorReady={setEditorInstance}
+                                onMagicCommand={() => setIsMagicCommandOpen(true)}
+                            />
+                        </div>
+                    </div>
                 </div>
 
-                {/* Right Sidebar: Version History OR Comment Sidebar */}
+                {/* Magic Command Overlay */}
+                <MagicCommand
+                    isOpen={isMagicCommandOpen}
+                    onClose={() => setIsMagicCommandOpen(false)}
+                    onInsert={handleMagicInsert}
+                    editor={editorInstance}
+                />
+
+                {/* Right Sidebar: Version History OR Comment Sidebar OR AI Sidebar */}
                 {
                     isVersionHistoryOpen && (
                         <div className="no-print">
@@ -400,7 +450,19 @@ export default function Editor() {
                     )
                 }
 
-                {/* AI Sidebar removed - Integrated into StructuredEditor's RightSidebar */}
+                {/* AI Sidebar */}
+                {
+                    !isVersionHistoryOpen && isAISidebarOpen && (
+                        <div className="no-print border-l border-gray-200 w-80 bg-white shadow-xl z-20">
+                            <AISidebar
+                                currentUser={currentUser}
+                                currentDoc={{ id: id, content: content }} // Pass content for context
+                                onClose={() => setIsAISidebarOpen(false)}
+                                embedded={true}
+                            />
+                        </div>
+                    )
+                }
             </div >
         </div >
     );

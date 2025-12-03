@@ -24,13 +24,22 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
 
         setSaving(true);
         try {
-            const htmlContent = blocksToHtml(documentState.blocks);
+            let htmlContent;
+            let contentType = 'html';
+
+            if (documentState.blocks && documentState.blocks.length > 0) {
+                htmlContent = blocksToHtml(documentState.blocks);
+                contentType = 'blocks';
+            } else {
+                htmlContent = documentState.content;
+            }
+
             const docData = {
                 title: documentState.title,
                 content: htmlContent,
-                blocks: documentState.blocks,
+                blocks: documentState.blocks || [], // Optional if using HTML
                 status: documentState.status,
-                contentType: 'blocks'
+                contentType: contentType
             };
 
             console.log('[SAVE] Saving document:', docData);
@@ -40,7 +49,7 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
             storage.saveVersion(currentUser.uid, id, {
                 title: documentState.title,
                 content: htmlContent,
-                blocks: documentState.blocks,
+                blocks: documentState.blocks || [],
                 status: documentState.status
             });
 
@@ -48,7 +57,7 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
             setLastSaved(now);
             setLastSavedState({
                 title: documentState.title,
-                content: htmlContent // Use the generated HTML as the "saved" content state
+                content: htmlContent
             });
 
         } catch (error) {
@@ -62,7 +71,9 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
     // Check if content has changed
     const isDirty = documentState && lastSavedState ? (
         documentState.title !== lastSavedState.title ||
-        blocksToHtml(documentState.blocks) !== lastSavedState.content
+        (documentState.blocks && documentState.blocks.length > 0
+            ? blocksToHtml(documentState.blocks) !== lastSavedState.content
+            : documentState.content !== lastSavedState.content)
     ) : false;
 
     // Auto-save effect

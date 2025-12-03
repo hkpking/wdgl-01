@@ -240,13 +240,98 @@ const StructuredEditor = React.forwardRef(({ blocks, onChange, readOnly, current
 
     const deleteBlock = (id) => {
         if (internalBlocks.length <= 1) {
-            alert('文档至少需要保留一个内容块');
+            // Instead of alerting, just clear the content if it's the last block
+            const block = internalBlocks[0];
+            if (block.content) {
+                handleBlockChange({ ...block, content: '' });
+            }
             return;
         }
         const newBlocks = internalBlocks.filter(b => b.id !== id);
         addToHistory(newBlocks);
-        if (selectedId === id) {
+
+        // Focus previous block if available, else next
+        const index = internalBlocks.findIndex(b => b.id === id);
+        if (index > 0) {
+            setSelectedId(internalBlocks[index - 1].id);
+        } else if (newBlocks.length > 0) {
+            setSelectedId(newBlocks[0].id);
+        } else {
             setSelectedId(null);
+        }
+    };
+
+    const handleSplitBlock = (id, contentBefore, contentAfter) => {
+        const index = internalBlocks.findIndex(b => b.id === id);
+        if (index === -1) return;
+
+        const currentBlock = internalBlocks[index];
+
+        // Update current block
+        const updatedCurrentBlock = { ...currentBlock, content: contentBefore };
+
+        // Create new block
+        const newBlock = {
+            id: `NEW-${Math.floor(Math.random() * 100000)}`,
+            type: 'clause', // Default to clause
+            content: contentAfter,
+            indent: currentBlock.indent || 0, // Inherit indentation
+            meta: {}
+        };
+
+        const newBlocks = [
+            ...internalBlocks.slice(0, index),
+            updatedCurrentBlock,
+            newBlock,
+            ...internalBlocks.slice(index + 1)
+        ];
+
+        addToHistory(newBlocks);
+        // Focus the new block
+        setTimeout(() => setSelectedId(newBlock.id), 0);
+    };
+
+    const handleMergeBlock = (id) => {
+        const index = internalBlocks.findIndex(b => b.id === id);
+        if (index <= 0) return; // Cannot merge first block
+
+        const currentBlock = internalBlocks[index];
+        const prevBlock = internalBlocks[index - 1];
+
+        // Only merge compatible types (text-based)
+        // For now, we assume all are mergeable or we just append content
+        const newContent = prevBlock.content + currentBlock.content;
+
+        const updatedPrevBlock = { ...prevBlock, content: newContent };
+
+        const newBlocks = [
+            ...internalBlocks.slice(0, index - 1),
+            updatedPrevBlock,
+            ...internalBlocks.slice(index + 1)
+        ];
+
+        addToHistory(newBlocks);
+        setSelectedId(prevBlock.id);
+
+        // We might need to handle cursor position setting in BlockItem via a prop or ref
+        // For now, BlockItem logic will try to set cursor to end if selected
+    };
+
+    const [cursorPos, setCursorPos] = useState('end'); // 'start' | 'end'
+
+    const handleFocusPrev = (id) => {
+        const index = internalBlocks.findIndex(b => b.id === id);
+        if (index > 0) {
+            setCursorPos('end');
+            setSelectedId(internalBlocks[index - 1].id);
+        }
+    };
+
+    const handleFocusNext = (id) => {
+        const index = internalBlocks.findIndex(b => b.id === id);
+        if (index < internalBlocks.length - 1) {
+            setCursorPos('start');
+            setSelectedId(internalBlocks[index + 1].id);
         }
     };
 
@@ -258,9 +343,6 @@ const StructuredEditor = React.forwardRef(({ blocks, onChange, readOnly, current
 
         // Ignore clicks on blocks (bubbled up)
         if (e.target.closest('.block-item')) return;
-
-        // If clicking on the scrollbar or something else interactive, ignore
-        // (Browser scrollbars are usually not elements, but let's be safe)
 
         const lastBlock = internalBlocks[internalBlocks.length - 1];
         if (lastBlock) {
@@ -289,7 +371,7 @@ const StructuredEditor = React.forwardRef(({ blocks, onChange, readOnly, current
             />
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-w-0 bg-slate-50 transition-all duration-300">
+            <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-50 transition-all duration-300">
                 {/* Toolbar */}
                 {!readOnly && (
                     <EditorToolbar onInsertBlock={addBlock} />
@@ -297,22 +379,22 @@ const StructuredEditor = React.forwardRef(({ blocks, onChange, readOnly, current
 
                 {/* Editor Area */}
                 <div
-                    className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-100/50"
+                    className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-100/50 scroll-smooth"
                     onClick={handleBackgroundClick}
                 >
                     <div className="flex flex-col items-center min-h-full">
                         <div
-                            className={`bg-white shadow-sm transition-all duration-300 relative h-fit ${showPageGuides ? 'w-[794px]' : 'w-full max-w-5xl'}`}
+                            className={`bg-white shadow-lg transition-all duration-300 relative h-fit mx-auto my-8 ${showPageGuides ? 'w-[794px]' : 'w-full max-w-4xl'}`}
                             style={showPageGuides ? {
                                 minHeight: '1123px',
                                 // Continuous sheet with dashed page lines every 1123px (A4 height)
-                                backgroundImage: 'linear-gradient(to bottom, transparent 1122px, #94a3b8 1122px, #94a3b8 1123px)',
+                                backgroundImage: 'linear-gradient(to bottom, transparent 1122px, #e2e8f0 1122px, #e2e8f0 1123px)',
                                 backgroundSize: '100% 1123px',
-                                padding: '40px 40px', // Approx 2.54cm margins
-                                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
+                                padding: '40px 50px', // Standard A4 margins (approx 2.54cm)
+                                boxShadow: '0 10px 30px -10px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)' // Floating paper effect
                             } : {
                                 minHeight: '800px',
-                                padding: '48px'
+                                padding: '60px 60px' // Generous padding for digital view
                             }}
                         >
                             {showPageGuides && (
@@ -336,12 +418,29 @@ const StructuredEditor = React.forwardRef(({ blocks, onChange, readOnly, current
                                             key={block.id}
                                             block={block}
                                             isSelected={selectedId === block.id}
-                                            onSelect={() => setSelectedId(block.id)}
+                                            cursorPos={selectedId === block.id ? cursorPos : undefined} // Pass cursor pos
+                                            onSelect={() => {
+                                                setSelectedId(block.id);
+                                                setCursorPos('end');
+                                            }}
                                             onChange={handleBlockChange}
                                             onDelete={deleteBlock}
                                             onDuplicate={duplicateBlock}
                                             onInsertAfter={(type) => addBlock(type || 'clause', {}, block.id)}
                                             readOnly={readOnly}
+                                            onSplit={handleSplitBlock}
+                                            onMerge={handleMergeBlock}
+                                            onFocusPrev={handleFocusPrev}
+                                            onFocusNext={handleFocusNext}
+                                            getContext={(id) => {
+                                                const index = internalBlocks.findIndex(b => b.id === id);
+                                                if (index <= 0) return '';
+                                                // Get previous 3 blocks as context
+                                                const start = Math.max(0, index - 3);
+                                                return internalBlocks.slice(start, index)
+                                                    .map(b => b.content)
+                                                    .join('\n');
+                                            }}
                                         />
                                     ))}
                                 </SortableContext>

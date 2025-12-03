@@ -1,9 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-    GripVertical, X, Image as ImageIcon, Workflow, Edit, Hash,
-    FileText, AlertTriangle, Shield, GitGraph, Trash2,
-    MoreHorizontal, Copy, Plus, AlignLeft, AlignCenter, AlignRight,
-    Heading1, Heading2, Heading3, Type,
+    GripVertical, Image as ImageIcon, Workflow, GitGraph, Trash2,
     Maximize, Download, Maximize2, Minimize2
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
@@ -13,115 +10,22 @@ import ArchitectureMatrix from './ArchitectureMatrix';
 import ZoomableCanvas from './ZoomableCanvas';
 import html2canvas from 'html2canvas';
 
-// Simple Menu Component
-const BlockMenu = ({ isOpen, onClose, position, onAction }) => {
-    if (!isOpen) return null;
 
-    const menuItems = [
-        {
-            label: '转换为',
-            icon: <Type size={14} />,
-            children: [
-                { label: '正文', icon: <FileText size={14} />, action: 'turn-text' },
-                { label: '标题 1', icon: <Heading1 size={14} />, action: 'turn-h1' },
-                { label: '标题 2', icon: <Heading2 size={14} />, action: 'turn-h2' },
-                { label: '标题 3', icon: <Heading3 size={14} />, action: 'turn-h3' },
-            ]
-        },
-        {
-            label: '对齐方式',
-            icon: <AlignLeft size={14} />,
-            children: [
-                { label: '左对齐', icon: <AlignLeft size={14} />, action: 'align-left' },
-                { label: '居中', icon: <AlignCenter size={14} />, action: 'align-center' },
-                { label: '右对齐', icon: <AlignRight size={14} />, action: 'align-right' },
-            ]
-        },
-        { type: 'divider' },
-        { label: '在下方插入', icon: <Plus size={14} />, action: 'insert-below' },
-        { label: '复制', icon: <Copy size={14} />, action: 'duplicate' },
-        { type: 'divider' },
-        { label: '删除', icon: <Trash2 size={14} />, action: 'delete', danger: true },
-    ];
-
-    return (
-        <>
-            <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); onClose(); }}></div>
-            <div
-                className="absolute z-50 bg-white rounded-lg shadow-xl border border-slate-200 w-48 py-1 text-sm animate-in fade-in zoom-in-95 duration-100"
-                style={{ top: position.y, left: position.x }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                {menuItems.map((item, index) => {
-                    if (item.type === 'divider') {
-                        return <div key={index} className="h-px bg-slate-100 my-1"></div>;
-                    }
-
-                    if (item.children) {
-                        return (
-                            <div key={index} className="group relative px-1">
-                                <div className="flex items-center justify-between px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer text-slate-700">
-                                    <div className="flex items-center gap-2">
-                                        {item.icon}
-                                        <span>{item.label}</span>
-                                    </div>
-                                    <MoreHorizontal size={12} className="text-slate-400" />
-                                </div>
-                                {/* Submenu */}
-                                <div className="absolute left-full top-0 ml-1 bg-white rounded-lg shadow-xl border border-slate-200 w-32 py-1 hidden group-hover:block">
-                                    {item.children.map((child, cIndex) => (
-                                        <button
-                                            key={cIndex}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onAction(child.action);
-                                                onClose();
-                                            }}
-                                            className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
-                                        >
-                                            {child.icon}
-                                            <span>{child.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    }
-
-                    return (
-                        <button
-                            key={index}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onAction(item.action);
-                                onClose();
-                            }}
-                            className={`w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 mx-1 rounded-sm ${item.danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700'}`}
-                            style={{ width: 'calc(100% - 8px)' }}
-                        >
-                            {item.icon}
-                            <span>{item.label}</span>
-                        </button>
-                    );
-                })}
-            </div>
-        </>
-    );
-};
 
 import { aiService } from '../../services/ai/AIService';
 
-export default function BlockItem({ block, isSelected, onSelect, onChange, onDelete, onDuplicate, onInsertAfter, readOnly }) {
+export default function BlockItem({ block, isSelected, cursorPos, onSelect, onChange, onDelete, onDuplicate, onInsertAfter, readOnly, onSplit, onMerge, onFocusPrev, onFocusNext, getContext }) {
     const [isHovered, setIsHovered] = useState(false);
     const [isDrawioOpen, setIsDrawioOpen] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [isCompact, setIsCompact] = useState(false);
-    const [showMenu, setShowMenu] = useState(false);
+
     const [ghostText, setGhostText] = useState('');
     const menuButtonRef = useRef(null);
     const contentRef = useRef(null);
     const exportRef = useRef(null);
     const debounceTimer = useRef(null);
+    const activeRequestRef = useRef(null); // To track active AI request ID
 
     const {
         attributes,
@@ -136,20 +40,26 @@ export default function BlockItem({ block, isSelected, onSelect, onChange, onDel
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.5 : 1,
-        zIndex: isDragging ? 100 : (showMenu ? 50 : 'auto'),
+        zIndex: isDragging ? 100 : 'auto',
         position: 'relative',
         marginLeft: `${(block.indent || 0) * 24}px`, // Visual indentation
     };
 
     // Style Logic
-    let containerClass = "block-item group relative mb-2 transition-all duration-200"; // Reduced margin for tighter feel
-    let contentClass = "outline-none p-2 rounded border border-transparent transition-colors"; // Reduced padding
+    // Seamless flow: no bottom margin for text blocks to mimic continuous text
+    let containerClass = "block-item group relative mb-0 transition-all duration-200";
+
+    // Content style: minimal padding, transparent border by default
+    // We use min-h-[24px] to ensure empty lines are clickable/visible
+    let contentClass = "outline-none px-1 py-0.5 rounded-sm border border-transparent transition-colors min-h-[24px]";
     let sideBorder = null;
 
     if (isSelected) {
-        contentClass += " bg-blue-50/50 border-blue-200 shadow-sm";
+        // Very subtle selection background, similar to native text selection but for the block
+        contentClass += " bg-blue-50/50";
     } else {
-        contentClass += " hover:bg-slate-50";
+        // No hover background for text blocks to maintain "clean paper" look
+        // Only add hover effect for complex blocks if needed
     }
 
     // Alignment
@@ -161,120 +71,128 @@ export default function BlockItem({ block, isSelected, onSelect, onChange, onDel
             block.level === 2 ? " text-2xl font-bold mt-5 mb-3 text-slate-800" :
                 " text-xl font-bold mt-4 mb-2 text-slate-800";
     } else if (block.type === 'risk') {
-        contentClass += " bg-amber-50/50 text-slate-800 border-amber-100";
-        sideBorder = <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-400 rounded-l" />;
+        contentClass += " bg-red-50/50 text-slate-800 border-red-100 pl-10 relative";
+        // sideBorder = <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l" />;
+        // Add icon inside content
     } else if (block.type === 'rule') {
-        contentClass += " bg-red-50/50 text-slate-800 border-red-100";
-        sideBorder = <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l" />;
+        contentClass += " bg-blue-50/50 text-slate-800 border-blue-100 pl-10 relative";
+        // sideBorder = <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-l" />;
     } else if (block.type === 'process_link') {
-        contentClass += " bg-purple-50 text-purple-900 font-medium flex items-center gap-3 border border-purple-100 py-2";
+        contentClass += " bg-purple-50 text-purple-900 font-medium flex items-center gap-3 border border-purple-100 py-2 my-2 rounded";
     } else {
-        contentClass += " text-slate-700 leading-relaxed text-base";
+        // Standard text: ensure line-height matches standard document flow
+        contentClass += " text-slate-700 leading-7 text-base";
     }
 
 
 
     useEffect(() => {
         if (isSelected && contentRef.current) {
-            // Focus and place cursor at end
+            // Focus and place cursor based on cursorPos prop
             contentRef.current.focus();
             const range = document.createRange();
             const sel = window.getSelection();
             range.selectNodeContents(contentRef.current);
-            range.collapse(false);
+
+            if (cursorPos === 'start') {
+                range.collapse(true); // Collapse to start
+            } else {
+                range.collapse(false); // Collapse to end (default)
+            }
+
             sel.removeAllRanges();
             sel.addRange(range);
         }
-    }, [isSelected]);
+    }, [isSelected, cursorPos]); // Re-run if selection or position preference changes
+
+    // ... (content change handler)
 
     const handleContentChange = (e) => {
         if (readOnly) return;
+        const newContent = e.target.innerHTML;
+        // Remove ghost text span if present in saved content
+        const cleanContent = newContent.replace(/<span data-ghost="true".*?<\/span>/g, '');
 
-        const newContent = e.currentTarget.innerHTML;
-        // Remove ghost text span if it exists in the HTML before saving
-        const cleanContent = newContent.replace(/<span[^>]*data-ghost="true"[^>]*>.*?<\/span>/g, '');
-
-        onChange({ ...block, content: cleanContent });
-
-        // Trigger Autocomplete
-        if (debounceTimer.current) clearTimeout(debounceTimer.current);
-        setGhostText(''); // Clear old ghost text on typing
-
-        // Only trigger if content is plain text (no complex HTML) and length > 5
-        const plainText = e.currentTarget.textContent;
-        if (plainText.length > 5 && !plainText.endsWith('.')) {
-            debounceTimer.current = setTimeout(async () => {
-                const suggestion = await aiService.generateCompletion(plainText);
-                if (suggestion && isSelected) {
-                    setGhostText(suggestion);
-                }
-            }, 1000); // 1s debounce
+        if (cleanContent !== block.content) {
+            onChange({ ...block, content: cleanContent });
         }
     };
 
+    // ... (Partial Accept logic)
     const handleKeyDown = (e) => {
-        if (e.key === 'Tab' && ghostText) {
-            e.preventDefault();
-            // Accept ghost text
-            const newContent = block.content + ghostText;
-            onChange({ ...block, content: newContent });
-            setGhostText('');
+        // Arrow Left: Go to prev block end if at start
+        if (e.key === 'ArrowLeft') {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const preCaretRange = range.cloneRange();
+                preCaretRange.selectNodeContents(contentRef.current);
+                preCaretRange.setEnd(range.startContainer, range.startOffset);
 
-            // Move cursor to end (simplified, might need range manipulation)
-            setTimeout(() => {
-                if (contentRef.current) {
-                    const range = document.createRange();
-                    const sel = window.getSelection();
-                    range.selectNodeContents(contentRef.current);
-                    range.collapse(false);
-                    sel.removeAllRanges();
-                    sel.addRange(range);
+                if (preCaretRange.toString().length === 0) {
+                    e.preventDefault();
+                    onFocusPrev(block.id);
                 }
-            }, 0);
-        } else if (ghostText) {
-            setGhostText('');
+            }
         }
 
-        if (e.key === 'Backspace' && !block.content) {
-            e.preventDefault();
-            onDelete(block.id);
+        // Arrow Right: Go to next block start if at end
+        if (e.key === 'ArrowRight') {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const postCaretRange = range.cloneRange();
+                postCaretRange.selectNodeContents(contentRef.current);
+                postCaretRange.setStart(range.endContainer, range.endOffset);
+
+                if (postCaretRange.toString().length === 0) {
+                    e.preventDefault();
+                    onFocusNext(block.id);
+                }
+            }
+        }
+
+        // Arrow Up: Go to prev block end (or keep default if not at top line)
+        if (e.key === 'ArrowUp') {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                // Check if we are visually at the top line. 
+                // Simple approximation: if text before caret is empty, we are definitely at start.
+                // For multi-line, this is harder. 
+                // Strategy: Let browser handle within-block nav. Only jump if we are at start?
+                // Or try to detect if browser DIDN'T move cursor (meaning we hit edge)?
+                // Reliable way: Check if we are at start.
+
+                const preCaretRange = range.cloneRange();
+                preCaretRange.selectNodeContents(contentRef.current);
+                preCaretRange.setEnd(range.startContainer, range.startOffset);
+
+                if (preCaretRange.toString().length === 0) {
+                    e.preventDefault();
+                    onFocusPrev(block.id);
+                }
+            }
+        }
+
+        // Arrow Down: Go to next block start
+        if (e.key === 'ArrowDown') {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const postCaretRange = range.cloneRange();
+                postCaretRange.selectNodeContents(contentRef.current);
+                postCaretRange.setStart(range.endContainer, range.endOffset);
+
+                if (postCaretRange.toString().length === 0) {
+                    e.preventDefault();
+                    onFocusNext(block.id);
+                }
+            }
         }
     };
 
-    const handleMenuAction = (action) => {
-        switch (action) {
-            case 'duplicate':
-                onDuplicate && onDuplicate(block.id);
-                break;
-            case 'delete':
-                if (window.confirm('确定要删除此块吗？')) onDelete(block.id);
-                break;
-            case 'insert-below':
-                onInsertAfter && onInsertAfter('clause'); // Default to clause
-                break;
-            case 'turn-text':
-                onChange({ ...block, type: 'clause', level: undefined });
-                break;
-            case 'turn-h1':
-                onChange({ ...block, type: 'heading', level: 1 });
-                break;
-            case 'turn-h2':
-                onChange({ ...block, type: 'heading', level: 2 });
-                break;
-            case 'turn-h3':
-                onChange({ ...block, type: 'heading', level: 3 });
-                break;
-            case 'align-left':
-                onChange({ ...block, meta: { ...block.meta, align: 'left' } });
-                break;
-            case 'align-center':
-                onChange({ ...block, meta: { ...block.meta, align: 'center' } });
-                break;
-            case 'align-right':
-                onChange({ ...block, meta: { ...block.meta, align: 'right' } });
-                break;
-        }
-    };
+
 
     return (
         <div
@@ -293,26 +211,19 @@ export default function BlockItem({ block, isSelected, onSelect, onChange, onDel
                     {/* Unified Handle (6-dots) */}
                     <div
                         ref={menuButtonRef}
-                        className={`absolute -left-8 top-2 p-1 text-slate-300 cursor-grab active:cursor-grabbing hover:bg-slate-100 hover:text-slate-600 rounded transition-all ${isSelected || isHovered || showMenu ? 'opacity-100' : 'opacity-0'}`}
+                        className={`absolute -left-8 top-2 p-1 text-slate-300 cursor-grab active:cursor-grabbing hover:bg-slate-100 hover:text-slate-600 rounded transition-all ${isSelected || isHovered ? 'opacity-100' : 'opacity-0'}`}
                         {...attributes}
                         {...listeners}
                         onClick={(e) => {
                             // Important: dnd-kit might swallow click if drag is detected.
                             // We rely on PointerSensor constraints in parent to allow small movements as clicks.
                             e.stopPropagation();
-                            setShowMenu(!showMenu);
                         }}
                     >
                         <GripVertical size={18} />
                     </div>
 
-                    {/* Block Menu */}
-                    <BlockMenu
-                        isOpen={showMenu}
-                        onClose={() => setShowMenu(false)}
-                        position={{ y: 30, x: -20 }} // Relative to handle, simplified
-                        onAction={handleMenuAction}
-                    />
+
                 </>
             )}
 
@@ -714,7 +625,17 @@ export default function BlockItem({ block, isSelected, onSelect, onChange, onDel
                     </div>
                 ) : (
                     <div className={contentClass}>
-                        {block.type !== 'heading' && (
+                        {block.type === 'risk' && (
+                            <div className="absolute left-3 top-2.5 text-red-500 select-none" contentEditable={false}>
+                                <AlertTriangle size={18} />
+                            </div>
+                        )}
+                        {block.type === 'rule' && (
+                            <div className="absolute left-3 top-2.5 text-blue-500 select-none" contentEditable={false}>
+                                <Shield size={18} />
+                            </div>
+                        )}
+                        {block.type !== 'heading' && block.type !== 'risk' && block.type !== 'rule' && (
                             <input
                                 type="text"
                                 value={block.number || ''}

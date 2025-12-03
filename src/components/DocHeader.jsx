@@ -4,12 +4,13 @@ import {
     FileText, ChevronDown, Clock, Cloud,
     Image as ImageIcon, Link as LinkIcon, Table as TableIcon,
     Minus, SquareCode, MoreHorizontal, ChevronRight,
-    Download, Printer, FileJson
+    Download, Printer, FileJson, Settings
 } from 'lucide-react';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { uploadImage } from '../utils/editor';
 import * as mockStorage from '../services/mockStorage';
 import { useDocumentExport } from '../hooks/useDocumentExport';
+import SettingsModal from './SettingsModal';
 
 export default function DocHeader({
     title,
@@ -32,6 +33,7 @@ export default function DocHeader({
     const [tableSize, setTableSize] = useState({ rows: 0, cols: 0 });
     const [showLinkInput, setShowLinkInput] = useState(false);
     const [linkUrl, setLinkUrl] = useState('');
+    const [showSettings, setShowSettings] = useState(false);
 
     const menuRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -293,7 +295,7 @@ export default function DocHeader({
                                 editor.chain().focus().insertContent({
                                     type: 'flowchart',
                                     attrs: {
-                                        data: { cells: [] },
+                                        xml: null,
                                         width: '100%',
                                         height: '500px',
                                     },
@@ -460,11 +462,27 @@ export default function DocHeader({
                         <Lock size={18} />
                         <span>共享</span>
                     </button>
+
+                    {/* Settings Button */}
+                    <button
+                        onClick={() => setShowSettings(true)}
+                        className="p-2 hover:bg-gray-100 rounded-full text-gray-600 transition-colors"
+                        title="设置"
+                    >
+                        <Settings size={20} />
+                    </button>
+
                     <div className="w-9 h-9 bg-purple-600 rounded-full text-white flex items-center justify-center text-sm font-medium border-2 border-white cursor-pointer">
                         U
                     </div>
                 </div>
             </div>
+
+            {/* Settings Modal */}
+            <SettingsModal
+                isOpen={showSettings}
+                onClose={() => setShowSettings(false)}
+            />
 
             {/* Hidden File Input */}
             <input

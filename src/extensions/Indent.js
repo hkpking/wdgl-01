@@ -67,36 +67,83 @@ export const Indent = Extension.create({
                     return editor.chain().focus().sinkListItem('listItem').run();
                 }
 
-                // For paragraphs, prioritize First Line Indent (Standard Chinese typesetting)
-                // If textIndent is 0, set it to 32px (approx 2 chars)
-                const currentTextIndent = editor.getAttributes('paragraph').textIndent || 0;
-                if (currentTextIndent === 0) {
-                    return editor.chain().focus().setTextIndent(32).run();
+                // Determine active type (paragraph or heading)
+                let activeType = null;
+                for (const type of this.options.types) {
+                    if (editor.isActive(type)) {
+                        activeType = type;
+                        break;
+                    }
                 }
 
-                // If already has first line indent, increase block indent (margin-left)
-                const currentMargin = editor.getAttributes('paragraph').marginLeft || 0;
-                return editor.chain().focus().setMarginLeft(currentMargin + 20).run();
+                if (!activeType) return false; // Not in a supported block
+
+                // Logic: Always increase indent (marginLeft) for Tab, 
+                // unless we want to support First Line Indent specifically.
+                // User complaint: "Whole document indents" -> likely means they want simple block indentation.
+                // Let's stick to standard block indentation (marginLeft) for consistency with Google Docs behavior on Tab.
+                // Google Docs: Tab increases Left Indent.
+
+                const currentMargin = editor.getAttributes(activeType).marginLeft || 0;
+                return editor.chain().focus().setMarginLeft(currentMargin + 32).run();
             },
             'Shift-Tab': () => {
                 const { editor } = this;
 
-                // If inside a list, lift the list item
                 if (editor.isActive('bulletList') || editor.isActive('orderedList') || editor.isActive('taskList')) {
                     return editor.chain().focus().liftListItem('listItem').run();
                 }
 
-                // For paragraphs, check textIndent first
-                const currentTextIndent = editor.getAttributes('paragraph').textIndent || 0;
+                let activeType = null;
+                for (const type of this.options.types) {
+                    if (editor.isActive(type)) {
+                        activeType = type;
+                        break;
+                    }
+                }
+
+                if (!activeType) return false;
+
+                const currentMargin = editor.getAttributes(activeType).marginLeft || 0;
+                const newMargin = Math.max(0, currentMargin - 32);
+                return editor.chain().focus().setMarginLeft(newMargin).run();
+            },
+            'Backspace': () => {
+                const { editor } = this;
+                const { selection } = editor.state;
+                const { $from, empty } = selection;
+
+                // Only handle if cursor is at the start of the block and selection is empty
+                if (!empty || $from.parentOffset !== 0) {
+                    return false;
+                }
+
+                let activeType = null;
+                for (const type of this.options.types) {
+                    if (editor.isActive(type)) {
+                        activeType = type;
+                        break;
+                    }
+                }
+
+                if (!activeType) return false;
+
+                // Check indentation
+                const currentMargin = editor.getAttributes(activeType).marginLeft || 0;
+                const currentTextIndent = editor.getAttributes(activeType).textIndent || 0;
+
+                if (currentMargin > 0) {
+                    // Decrease indent
+                    return editor.chain().focus().setMarginLeft(Math.max(0, currentMargin - 32)).run();
+                }
+
                 if (currentTextIndent > 0) {
+                    // Remove text indent
                     return editor.chain().focus().setTextIndent(0).run();
                 }
 
-                // Otherwise, decrease block indent
-                const currentMargin = editor.getAttributes('paragraph').marginLeft || 0;
-                const newMargin = Math.max(0, currentMargin - 20);
-                return editor.chain().focus().setMarginLeft(newMargin).run();
-            },
+                return false; // Default backspace behavior (merge)
+            }
         };
     },
 });

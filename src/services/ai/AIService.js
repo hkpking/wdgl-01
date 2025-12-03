@@ -80,13 +80,23 @@ class AIService {
 
             const prompt = `
 You are an intelligent writing assistant.
-Complete the following text naturally.
-Output ONLY the completion text. Do not repeat the input.
-Keep it short (max 1 sentence).
-If the input is complete, return empty string.
+Your task is to complete the user's sentence or paragraph naturally.
+Use the provided context to understand the tone and topic.
 
-Context: ${context}
-Input: "${text}"
+Rules:
+1. Output ONLY the completion text.
+2. Do NOT repeat the input text.
+3. If the input ends in the middle of a sentence, complete it.
+4. If the input is a new line, suggest the next logical sentence based on context.
+5. Keep it concise (max 1-2 sentences).
+6. If the input is complete and no obvious continuation exists, return empty string.
+
+Context (Previous 500 chars):
+"${context}"
+
+Current Input (The user just typed):
+"${text}"
+
 Completion:`;
 
             const result = await completionModel.generateContent(prompt);
@@ -101,6 +111,58 @@ Completion:`;
             return "";
         }
     }
+
+    /**
+     * Generate autocomplete suggestion (Streaming)
+     * @param {string} text Current text
+     * @param {string} context Surrounding context
+     * @param {function} onChunk Callback for each chunk
+     * @returns {Promise<void>}
+     */
+    async streamCompletion(text, context = '', onChunk) {
+        if (this.isMock) {
+            return this._mockStream("Autocomplete: " + text, onChunk);
+        }
+
+        try {
+            const completionModel = this.model;
+            const prompt = `
+You are a sophisticated AI writing assistant embedded in a document editor.
+Your goal is to providing seamless, context-aware text completion that feels like the user's own thought process.
+
+**Context:**
+The user is writing a document.
+Previous content (Context):
+"""
+${context}
+"""
+
+Current active block content (The user just typed):
+"${text}"
+
+**Instructions:**
+1.  **Seamless Continuation**: Complete the current sentence or start the next logical sentence. The transition must be grammatically perfect.
+2.  **No Repetition**: NEVER repeat the text from "Current active block content". Start EXACTLY where the user left off.
+3.  **Tone Matching**: Analyze the "Previous content" to match the user's writing style, vocabulary, and tone.
+4.  **Conciseness**: Suggest 1-3 sentences maximum. Don't write a whole paragraph unless it's clearly a heading implying a section.
+5.  **Formatting**: Do not use markdown (like **bold**) unless appropriate for the document structure.
+6.  **Silence**: If the input is complete and ambiguous, or if you are unsure, output NOTHING (empty string). Do not hallucinate random text.
+
+**Output:**
+Directly output the completion text. Do not include "Here is the completion:" or quotes.
+`;
+
+            const result = await completionModel.generateContentStream(prompt);
+
+            for await (const chunk of result.stream) {
+                const chunkText = chunk.text();
+                onChunk(chunkText);
+            }
+        } catch (error) {
+            console.warn("Autocomplete stream failed:", error);
+        }
+    }
+
 
     /**
      * Switch to Mock mode explicitly or clear API key

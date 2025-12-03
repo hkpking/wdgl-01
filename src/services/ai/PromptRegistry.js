@@ -1,48 +1,36 @@
 /**
- * Centralized registry for AI prompts.
- * Ensures consistency and easy tuning of prompts.
+ * Registry for AI Prompts to ensure consistency and easy updates.
  */
-
 export const PromptRegistry = {
-    /**
-     * Generate a structured outline from a topic
-     * @param {string} topic 
-     */
-    GENERATE_OUTLINE: (topic) => `
-You are an expert document architect.
-Create a detailed, hierarchical outline for a document about: "${topic}".
-Format the output as a clean Markdown list (using -, *, or 1. for levels).
-Do not include any introductory text or explanations, just the outline.
-    `,
+    // --- Text Refinement ---
+    POLISH: (text) => `You are a professional editor. Please polish the following text to make it more professional, concise, and clear, while maintaining the original meaning.\n\nText to polish:\n"${text}"`,
 
-    /**
-     * Summarize the provided text
-     * @param {string} text 
-     */
-    SUMMARIZE: (text) => `
-Summarize the following text concisely, capturing the key points:
+    FIX_GRAMMAR: (text) => `Please check the following text for grammar, spelling, and punctuation errors. Output only the corrected text.\n\nText to check:\n"${text}"`,
 
-"${text}"
-    `,
+    TRANSLATE: (text, lang = 'English') => `Please translate the following text into ${lang}. Output only the translated text.\n\nText to translate:\n"${text}"`,
 
-    /**
-     * Expand on a specific point
-     * @param {string} text 
-     */
-    EXPAND: (text) => `
-Expand on the following text, adding more detail, examples, and context:
+    SUMMARIZE: (text) => `Please summarize the following text into one concise sentence.\n\nText to summarize:\n"${text}"`,
 
-"${text}"
-    `,
+    CONTINUE: (text) => `Please continue writing based on the following text. Maintain the same tone and style.\n\nContext:\n"${text}"`,
 
-    /**
-     * Change the tone of the text
-     * @param {string} text 
-     * @param {string} tone - e.g., "Professional", "Casual", "Academic"
-     */
-    CHANGE_TONE: (text, tone) => `
-Rewrite the following text to have a ${tone} tone:
+    // --- Structured Generation ---
+    GENERATE_OUTLINE: (topic) => `Please generate a structured document outline for the topic: "${topic}". Use Markdown headers (#, ##, ###).`,
 
-"${text}"
-    `
+    GENERATE_MERMAID: (description) => `
+You are an expert in Mermaid.js.
+Please generate a Mermaid flowchart based on the following description: "${description}".
+Rules:
+1. Output ONLY the mermaid code block (starting with \`\`\`mermaid).
+2. Use 'graph TD' or 'graph LR'.
+3. Ensure syntax is valid.
+4. Do not include explanations.
+`,
+
+    GENERATE_TABLE: (description) => `
+Please generate a Markdown table based on the following description: "${description}".
+Rules:
+1. Output ONLY the markdown table.
+2. Ensure columns are aligned.
+3. Do not include explanations.
+`
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, Extension } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import ImageExtension from '../extensions/ImageExtension';
@@ -21,10 +21,13 @@ import GlobalDragHandle from 'tiptap-extension-global-drag-handle';
 import Flowchart from '../extensions/FlowchartExtension';
 import { Indent } from '../extensions/Indent';
 import { CommentMark } from '../extensions/CommentMark';
+import { GhostText } from '../extensions/GhostTextExtension';
+import { RiskNode, RuleNode, ProcessLinkNode, ProcessCardNode, ArchitectureMatrixNode } from '../extensions/ModuleExtensions';
+import { MermaidExtension } from '../extensions/MermaidExtension';
 import TableContextMenu from './TableContextMenu';
 import './editor.css';
 
-export default function RichTextEditor({ content, onChange, placeholder = '开始输入...', editable = true, onEditorReady }) {
+export default function RichTextEditor({ content, onChange, placeholder = '开始输入...', editable = true, onEditorReady, onMagicCommand }) {
     const [menuPosition, setMenuPosition] = useState(null);
 
     const editor = useEditor({
@@ -75,6 +78,52 @@ export default function RichTextEditor({ content, onChange, placeholder = '开�
             Flowchart,
             Indent,
             CommentMark,
+            GhostText,
+            RiskNode,
+            RuleNode,
+            ProcessLinkNode,
+            ProcessCardNode,
+            ArchitectureMatrixNode,
+            ProcessCardNode,
+            ArchitectureMatrixNode,
+            MermaidExtension,
+            Extension.create({
+                name: 'HeadingEnterHandler',
+                addKeyboardShortcuts() {
+                    return {
+                        Enter: ({ editor }) => {
+                            const { selection } = editor.state;
+                            const { $from, empty } = selection;
+
+                            if (!empty || $from.parent.type.name !== 'heading') {
+                                return false;
+                            }
+
+                            const isAtEnd = $from.parentOffset === $from.parent.content.size;
+
+                            if (isAtEnd) {
+                                return editor.chain().insertContent({ type: 'paragraph' }).run();
+                            }
+
+                            return false;
+                        },
+                    };
+                },
+            }),
+            Extension.create({
+                name: 'magicCommandShortcut',
+                addKeyboardShortcuts() {
+                    return {
+                        'Mod-k': () => {
+                            if (onMagicCommand) {
+                                onMagicCommand();
+                                return true;
+                            }
+                            return false;
+                        },
+                    }
+                },
+            }),
         ],
         content,
         editable,
@@ -84,7 +133,7 @@ export default function RichTextEditor({ content, onChange, placeholder = '开�
         },
         editorProps: {
             attributes: {
-                class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-xl focus:outline-none max-w-none min-h-[900px] px-8 py-10',
+                class: 'prose prose-sm max-w-none w-full focus:outline-none min-h-[900px] px-8 py-10',
             },
         },
     });

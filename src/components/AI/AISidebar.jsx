@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, X, Send, Paperclip, FileText, Shield, Bot, User } from 'lucide-react';
 import SourceSelector from './SourceSelector';
+import { aiService } from '../../services/ai/AIService';
 import * as mockStorage from '../../services/mockStorage';
 
 export default function AISidebar({ currentUser, currentDoc, onClose, embedded = false }) {
@@ -12,6 +13,7 @@ export default function AISidebar({ currentUser, currentDoc, onClose, embedded =
     const [sources, setSources] = useState([]); // Array of docs
     const [isSourceSelectorOpen, setIsSourceSelectorOpen] = useState(false);
     const messagesEndRef = useRef(null);
+    const textareaRef = useRef(null);
 
     // Initialize with current doc as source
     useEffect(() => {
@@ -41,47 +43,49 @@ export default function AISidebar({ currentUser, currentDoc, onClose, embedded =
         const userMsg = { id: Date.now(), role: 'user', content: input };
         setMessages(prev => [...prev, userMsg]);
         setInput('');
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+        }
         setIsThinking(true);
 
-        // Mock AI Logic (RAG)
-        setTimeout(() => {
-            const response = generateMockResponse(userMsg.content, sources);
-            setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ai', content: response }]);
+        // Prepare Context
+        let context = '';
+        if (sources.length > 0) {
+            context = sources.map(s => `Document: ${s.title}\nContent: ${s.content || ''}`).join('\n\n');
+        }
+
+        // Construct Prompt
+        const prompt = `
+You are a helpful AI assistant for a document editor.
+User Query: "${userMsg.content}"
+
+Context Documents:
+${context}
+
+Instructions:
+1. Answer the user's query based on the provided Context Documents.
+2. If the answer is not in the documents, use your general knowledge but mention that it's not from the context.
+3. Be concise and professional.
+`;
+
+        try {
+            let aiResponseText = '';
+            const aiMsgId = Date.now() + 1;
+
+            // Add initial empty AI message
+            setMessages(prev => [...prev, { id: aiMsgId, role: 'ai', content: '' }]);
+
+            await aiService.streamText(prompt, (chunk) => {
+                aiResponseText += chunk;
+                setMessages(prev => prev.map(msg =>
+                    msg.id === aiMsgId ? { ...msg, content: aiResponseText } : msg
+                ));
+            });
+        } catch (error) {
+            setMessages(prev => [...prev, { id: Date.now() + 2, role: 'ai', content: `Error: ${error.message}` }]);
+        } finally {
             setIsThinking(false);
-        }, 1500);
-    };
-
-    // --- Mock RAG Logic ---
-    const generateMockResponse = (query, contextDocs) => {
-        const lowerQuery = query.toLowerCase();
-
-        // 1. Check for specific keywords
-        if (lowerQuery.includes('总结') || lowerQuery.includes('summary')) {
-            if (contextDocs.length === 0) return '请先添加一些文档作为上下文，我才能帮您总结。';
-            const doc = contextDocs[0];
-            return `基于文档 **《${doc.title}》** 的总结：\n\n这是一个关于${doc.title}的文档。主要内容包括：\n1. 核心定义与范围\n2. 执行标准与流程\n3. 相关责任人\n\n(这是模拟的总结内容)`;
         }
-
-        if (lowerQuery.includes('合规') || lowerQuery.includes('compliance')) {
-            const sysDoc = mockStorage.getSystemKnowledge().find(d => d.id === 'sys_compliance');
-            if (sysDoc) {
-                return `根据 **系统知识库 - ${sysDoc.title}**：\n\n${sysDoc.content}\n\n建议您在编写文档时注意这些合规要求。`;
-            }
-        }
-
-        // 2. Keyword matching in context
-        const relevantDocs = contextDocs.filter(doc =>
-            (doc.content || '').toLowerCase().includes(lowerQuery) ||
-            (doc.title || '').toLowerCase().includes(lowerQuery)
-        );
-
-        if (relevantDocs.length > 0) {
-            const docNames = relevantDocs.map(d => `《${d.title}》`).join('、');
-            return `我在以下文档中找到了相关信息：${docNames}。\n\n具体内容似乎涉及到了您的查询关键词。建议您仔细阅读这些文档的第 2-3 章节。\n\n(模拟回复：已定位到相关文档)`;
-        }
-
-        // 3. Fallback
-        return '抱歉，我在当前的上下文中没有找到相关信息。您可以尝试：\n1. 添加更多相关文档作为来源\n2. 检查系统知识库\n3. 换一个提问方式';
     };
 
     return (
@@ -132,47 +136,53 @@ export default function AISidebar({ currentUser, currentDoc, onClose, embedded =
                             {msg.role === 'ai' ? <Bot size={16} /> : <User size={16} />}
                         </div>
                         <div className={`max-w-[80%] p-3 rounded-lg text-sm whitespace-pre-wrap ${msg.role === 'ai' ? 'bg-white border border-gray-200 shadow-sm text-gray-800' : 'bg-blue-600 text-white'}`}>
-                            {msg.content}
+                            {msg.content ? msg.content : (
+                                <div className="flex gap-1 py-1">
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
-                {isThinking && (
-                    <div className="flex gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center flex-shrink-0">
-                            <Bot size={16} />
-                        </div>
-                        <div className="bg-white border border-gray-200 p-3 rounded-lg shadow-sm">
-                            <div className="flex gap-1">
-                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </div>
-                        </div>
-                    </div>
-                )}
                 <div ref={messagesEndRef} />
             </div>
 
             {/* Input Area */}
             <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-gray-200">
-                <div className="relative">
-                    <input
-                        type="text"
+                <div className="relative flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-xl p-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:bg-white transition">
+                    <textarea
+                        ref={textareaRef}
                         value={input}
-                        onChange={(e) => setInput(e.target.value)}
+                        onChange={(e) => {
+                            setInput(e.target.value);
+                            // Auto-resize
+                            e.target.style.height = 'auto';
+                            e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSendMessage(e);
+                            }
+                        }}
                         placeholder="输入问题，或使用 @ 引用文档..."
-                        className="w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
+                        className="w-full bg-transparent border-none focus:ring-0 resize-none max-h-[150px] py-2 px-2 text-sm custom-scrollbar"
+                        rows={1}
+                        style={{ minHeight: '40px' }}
                     />
                     <button
                         type="submit"
                         disabled={!input.trim() || isThinking}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition mb-0.5 flex-shrink-0"
                     >
                         <Send size={16} />
                     </button>
                 </div>
-                <div className="mt-2 text-[10px] text-gray-400 text-center">
-                    AI 可能会犯错，请核对重要信息。
+                <div className="mt-2 text-[10px] text-gray-400 text-center flex justify-between px-2">
+                    <span>Shift + Enter 换行</span>
+                    <span>AI 可能会犯错，请核对重要信息。</span>
                 </div>
             </form>
 

@@ -40,6 +40,7 @@ export default function DocToolbar({ editor, onAddComment }) {
 
     const fileInputRef = useRef(null);
     const insertMenuRef = useRef(null);
+    const headingMenuRef = useRef(null); // New ref for heading menu
     const fontFamilyMenuRef = useRef(null);
     const fontSizeMenuRef = useRef(null);
     const lineHeightMenuRef = useRef(null);
@@ -56,6 +57,9 @@ export default function DocToolbar({ editor, onAddComment }) {
                 setShowInsertMenu(false);
                 setShowTablePicker(false);
             }
+            if (headingMenuRef.current && !headingMenuRef.current.contains(event.target)) {
+                setShowHeadingMenu(false);
+            }
             if (fontFamilyMenuRef.current && !fontFamilyMenuRef.current.contains(event.target)) {
                 setShowFontFamilyMenu(false);
             }
@@ -71,13 +75,10 @@ export default function DocToolbar({ editor, onAddComment }) {
             if (highlightMenuRef.current && !highlightMenuRef.current.contains(event.target)) {
                 setShowHighlightMenu(false);
             }
-            if (showHeadingMenu && !event.target.closest('button[title="标题"]')) {
-                setShowHeadingMenu(false);
-            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showHeadingMenu]);
+    }, []);
 
     if (!editor) {
         return null;
@@ -140,7 +141,7 @@ export default function DocToolbar({ editor, onAddComment }) {
     const isTableActive = editor.isActive('table');
 
     return (
-        <div className="bg-[#edf2fa] px-3 py-1.5 flex flex-wrap gap-0.5 items-center rounded-full mx-4 mb-2 shadow-sm border border-[#c7c7c7] sticky top-2 z-10">
+        <div className="bg-[#edf2fa] px-3 py-1.5 flex flex-wrap gap-0.5 items-center border-b border-[#c7c7c7] sticky top-0 z-10 w-full">
             {/* History */}
             <ToolbarButton
                 onClick={() => editor.chain().focus().undo().run()}
@@ -174,7 +175,7 @@ export default function DocToolbar({ editor, onAddComment }) {
             <ToolbarSeparator />
 
             {/* Headings / Normal Text */}
-            <div className="relative" ref={insertMenuRef}> {/* Reusing ref for simplicity, ideally separate */}
+            <div className="relative" ref={headingMenuRef}>
                 <button
                     onClick={() => setShowHeadingMenu(!showHeadingMenu)}
                     className="flex items-center gap-2 px-2 py-1 rounded hover:bg-[#f0f4f8] text-[#444746] text-sm font-medium w-32 justify-between"
@@ -381,10 +382,80 @@ export default function DocToolbar({ editor, onAddComment }) {
                 <MessageSquarePlus size={16} />
             </ToolbarButton>
 
-            <ToolbarButton onClick={addImage} title="插入图片">
-                <ImageIcon size={16} />
-            </ToolbarButton>
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+            <ToolbarSeparator />
+
+            {/* Insert Menu */}
+            <div className="relative" ref={insertMenuRef}>
+                <button
+                    onClick={() => setShowInsertMenu(!showInsertMenu)}
+                    className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#f0f4f8] text-[#444746] text-sm font-medium"
+                >
+                    <Plus size={16} />
+                    <span>插入</span>
+                    <ChevronDown size={12} />
+                </button>
+                {showInsertMenu && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg p-1 flex flex-col gap-1 z-20 min-w-[180px]">
+                        <button onClick={() => { addImage(); setShowInsertMenu(false); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+                            <ImageIcon size={14} /> 图片
+                        </button>
+                        <button onClick={() => { setShowTablePicker(!showTablePicker); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 justify-between group relative">
+                            <span className="flex items-center gap-2"><TableIcon size={14} /> 表格</span>
+                            <ChevronDown size={12} className="-rotate-90" />
+
+                            {/* Table Picker Submenu */}
+                            {showTablePicker && (
+                                <div className="absolute left-full top-0 ml-1 bg-white border border-gray-200 rounded shadow-lg p-2 z-30 w-48">
+                                    <div className="mb-2 text-xs text-gray-500 text-center">
+                                        {tableSize.rows > 0 ? `${tableSize.cols} x ${tableSize.rows}` : '插入表格'}
+                                    </div>
+                                    <div
+                                        className="grid grid-cols-10 gap-1"
+                                        onMouseLeave={() => setTableSize({ rows: 0, cols: 0 })}
+                                    >
+                                        {[...Array(10)].map((_, row) => (
+                                            [...Array(10)].map((_, col) => (
+                                                <div
+                                                    key={`${row}-${col}`}
+                                                    className={`w-3 h-3 border border-gray-200 ${col < tableSize.cols && row < tableSize.rows
+                                                        ? 'bg-blue-500 border-blue-600'
+                                                        : 'bg-white hover:bg-blue-100'
+                                                        }`}
+                                                    onMouseEnter={() => setTableSize({ rows: row + 1, cols: col + 1 })}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        editor.chain().focus().insertTable({ rows: row + 1, cols: col + 1, withHeaderRow: true }).run();
+                                                        setShowTablePicker(false);
+                                                        setShowInsertMenu(false);
+                                                    }}
+                                                />
+                                            ))
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </button>
+
+                        <div className="h-[1px] bg-gray-200 my-1"></div>
+
+                        <button onClick={() => { editor.chain().focus().insertContent({ type: 'risk' }).run(); setShowInsertMenu(false); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+                            <span className="text-red-500"><ArrowUp size={14} /></span> 风险点
+                        </button>
+                        <button onClick={() => { editor.chain().focus().insertContent({ type: 'rule' }).run(); setShowInsertMenu(false); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+                            <span className="text-blue-500"><CheckSquare size={14} /></span> 控制规则
+                        </button>
+                        <button onClick={() => { editor.chain().focus().insertContent({ type: 'processLink' }).run(); setShowInsertMenu(false); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+                            <span className="text-purple-500"><LinkIcon size={14} /></span> 关联流程
+                        </button>
+                        <button onClick={() => { editor.chain().focus().insertContent({ type: 'processCard' }).run(); setShowInsertMenu(false); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+                            <span className="text-slate-500"><SquareCode size={14} /></span> 流程卡片
+                        </button>
+                        <button onClick={() => { editor.chain().focus().insertContent({ type: 'architectureMatrix' }).run(); setShowInsertMenu(false); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+                            <span className="text-slate-500"><List size={14} /></span> 架构矩阵
+                        </button>
+                    </div>
+                )}
+            </div>
 
             <ToolbarSeparator />
 

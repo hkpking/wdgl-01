@@ -3,33 +3,29 @@ import { AlignLeft, ChevronRight } from 'lucide-react';
 
 export default function DocOutline({ editor }) {
     const [headings, setHeadings] = useState([]);
+    const [activeId, setActiveId] = useState(null);
 
     useEffect(() => {
         if (!editor) return;
 
         const updateHeadings = () => {
             const newHeadings = [];
-            const transaction = editor.state.tr;
-
             editor.state.doc.descendants((node, pos) => {
                 if (node.type.name === 'heading') {
-                    const id = `heading-${pos}`;
-                    // Assign an ID to the node if it doesn't have one (optional, but good for linking)
-                    // For now, we'll just use the position to scroll
+                    // Use a more stable ID if possible, but pos is okay for static content
+                    // Ideally, we should add IDs to heading nodes in Tiptap
                     newHeadings.push({
                         level: node.attrs.level,
                         text: node.textContent,
-                        pos: pos
+                        pos: pos,
+                        id: `heading-${pos}`
                     });
                 }
             });
             setHeadings(newHeadings);
         };
 
-        // Initial update
         updateHeadings();
-
-        // Subscribe to updates
         editor.on('update', updateHeadings);
 
         return () => {
@@ -37,16 +33,84 @@ export default function DocOutline({ editor }) {
         };
     }, [editor]);
 
+    // Active Heading Detection
+    useEffect(() => {
+        if (!editor || headings.length === 0) return;
+
+        const handleScroll = () => {
+            // Find the heading that is closest to the top of the viewport
+            // We can use editor.view.domAtPos to get DOM elements
+            let currentActiveId = null;
+            let minDistance = Infinity;
+
+            // Get the editor scroll container (usually the parent with overflow-y-auto)
+            // In our case, it's the parent div in Editor.jsx
+            // But we can also check relative to viewport
+
+            for (const heading of headings) {
+                try {
+                    const dom = editor.view.nodeDOM(heading.pos);
+                    // nodeDOM might return the content, not the wrapper. 
+                    // Use domAtPos for more reliability in some cases, but nodeDOM is usually fine for blocks.
+                    // Actually, editor.view.nodeDOM(pos) returns the DOM node for the node at pos.
+
+                    if (dom && dom.getBoundingClientRect) {
+                        const rect = dom.getBoundingClientRect();
+                        // We want the heading that is just above or close to the top (e.g. within top 200px)
+                        // Or the first one visible.
+
+                        // Distance from top of viewport
+                        const distance = Math.abs(rect.top - 100); // Offset for header
+
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            currentActiveId = heading.id;
+                        }
+                    }
+                } catch (e) {
+                    // Ignore errors if DOM not found
+                }
+            }
+
+            if (currentActiveId) {
+                setActiveId(currentActiveId);
+            }
+        };
+
+        // Attach scroll listener to the scrollable container
+        // We need to find the scrollable container. In Editor.jsx, it's the div with overflow-y-auto.
+        // We can attach to window if it scrolls window, but here it scrolls a div.
+        // A simple way is to attach to 'scroll' on capture phase on document, or find the specific element.
+        // Let's try attaching to the editor's parent element if possible, or just use a global capture.
+
+        const scrollContainer = editor.view.dom.closest('.overflow-y-auto');
+        if (scrollContainer) {
+            scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+            // Initial check
+            handleScroll();
+        } else {
+            // Fallback
+            window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+        }
+
+        return () => {
+            if (scrollContainer) {
+                scrollContainer.removeEventListener('scroll', handleScroll);
+            }
+            window.removeEventListener('scroll', handleScroll, { capture: true });
+        };
+    }, [editor, headings]);
+
     const handleHeadingClick = (pos) => {
         if (editor) {
-            editor.chain().focus().setTextSelection(pos).run();
-            // Scroll into view logic is handled by Tiptap's focus, 
-            // but sometimes we might need to manually scroll the container if it's custom.
-            // For now, let's rely on Tiptap's scrollIntoView.
-            const dom = editor.view.domAtPos(pos).node;
+            // editor.chain().focus().setTextSelection(pos).run();
+            // Better scrolling:
+            const dom = editor.view.nodeDOM(pos);
             if (dom && dom.scrollIntoView) {
-                dom.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                dom.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
+            // Update active manually for instant feedback
+            setActiveId(`heading-${pos}`);
         }
     };
 
@@ -58,7 +122,7 @@ export default function DocOutline({ editor }) {
                 <AlignLeft size={18} />
                 <span className="font-medium text-sm">文档大纲</span>
             </div>
-            <div className="flex-1 p-4 overflow-y-auto">
+            <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
                 {headings.length === 0 ? (
                     <div className="text-sm text-gray-400 italic text-center mt-10">
                         暂无标题
@@ -66,12 +130,15 @@ export default function DocOutline({ editor }) {
                         <span className="text-xs">添加标题以在此处显示</span>
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-0.5">
                         {headings.map((heading, index) => (
                             <button
                                 key={index}
                                 onClick={() => handleHeadingClick(heading.pos)}
-                                className={`text-left text-sm text-gray-600 hover:bg-gray-100 hover:text-blue-600 py-1.5 px-2 rounded truncate transition-colors
+                                className={`text-left text-sm py-1.5 px-2 rounded truncate transition-all duration-200
+                                    ${activeId === heading.id
+                                        ? 'bg-blue-50 text-blue-600 font-medium border-l-2 border-blue-500'
+                                        : 'text-gray-600 hover:bg-gray-100 hover:text-slate-900 border-l-2 border-transparent'}
                                     ${heading.level === 1 ? 'font-medium' : ''}
                                     ${heading.level === 2 ? 'pl-4 text-xs' : ''}
                                     ${heading.level >= 3 ? 'pl-8 text-xs text-gray-500' : ''}
