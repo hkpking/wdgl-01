@@ -136,3 +136,6 @@ secrets/
 credentials/
 .env.*
 !.env.example
+
+# Agent 规则文件 (包含环境敏感信息)
+.agent/
