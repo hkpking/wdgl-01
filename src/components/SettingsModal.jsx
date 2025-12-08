@@ -5,7 +5,7 @@ import { aiService } from '../services/ai/AIService';
 export default function SettingsModal({ isOpen, onClose }) {
     const [activeTab, setActiveTab] = useState('ai');
     const [apiKey, setApiKey] = useState('');
-    const [selectedModel, setSelectedModel] = useState('gemini-pro');
+    const [selectedModel, setSelectedModel] = useState('gemini-1.5-flash');
     const [availableModels, setAvailableModels] = useState([]);
 
     useEffect(() => {
@@ -13,7 +13,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             // Load current settings
             const currentKey = localStorage.getItem('wdgl_ai_key') || '';
             setApiKey(currentKey);
-            setSelectedModel(localStorage.getItem('wdgl_ai_model') || 'gemini-pro');
+            setSelectedModel(localStorage.getItem('wdgl_ai_model') || 'gemini-1.5-flash');
 
             if (currentKey) {
                 fetchModels(currentKey);
@@ -66,8 +66,8 @@ export default function SettingsModal({ isOpen, onClose }) {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === tab.id
-                                        ? 'bg-white text-blue-600 shadow-sm ring-1 ring-gray-200'
-                                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                    ? 'bg-white text-blue-600 shadow-sm ring-1 ring-gray-200'
+                                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                                     }`}
                             >
                                 {tab.icon}
@@ -130,8 +130,8 @@ export default function SettingsModal({ isOpen, onClose }) {
                                                     ))
                                                 ) : (
                                                     <>
-                                                        <option value="gemini-pro">Gemini Pro (Default)</option>
-                                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Default)</option>
+                                                        <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                                                     </>
                                                 )}
                                             </select>

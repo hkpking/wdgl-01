@@ -8,7 +8,7 @@ import { PromptRegistry } from './PromptRegistry';
 class AIService {
     constructor() {
         this.apiKey = localStorage.getItem('wdgl_ai_key') || '';
-        this.modelName = localStorage.getItem('wdgl_ai_model') || 'gemini-pro';
+        this.modelName = localStorage.getItem('wdgl_ai_model') || 'gemini-1.5-flash';
         this.genAI = null;
         this.model = null;
         this.isMock = !this.apiKey;
@@ -22,7 +22,7 @@ class AIService {
      * Initialize the Gemini client
      * @param {string} apiKey 
      */
-    initClient(apiKey, modelName = 'gemini-pro') {
+    initClient(apiKey, modelName = 'gemini-1.5-flash') {
         this.apiKey = apiKey;
         this.modelName = modelName;
         this.isMock = false;
@@ -57,9 +57,9 @@ class AIService {
         } catch (error) {
             console.error("Error fetching models:", error);
             return [
-                { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (Preview)' },
-                { id: 'gemini-pro', name: 'Gemini Pro (Default)' },
-                { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' }
+                { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Default)' },
+                { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+                { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (Preview)' }
             ];
         }
     }
