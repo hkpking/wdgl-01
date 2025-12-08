@@ -125,3 +125,14 @@ dist-ssr
 Thumbs.db
 .tmp.driveupload/
 *.patch
+
+# 敏感信息 (Sensitive Data)
+*.pem
+*.key
+*_key
+id_rsa*
+*.secret
+secrets/
+credentials/
+.env.*
+!.env.example

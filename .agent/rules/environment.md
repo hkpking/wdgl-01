@@ -1,6 +1,6 @@
-# 开发环境配置 (Development Environment)
+# 环境配置 (Environment Configuration)
 
-## 服务器信息
+## 开发环境
 
 | 项目 | 值 |
 |------|-----|
@@ -10,44 +10,88 @@
 | **Node.js** | v24.11.1 |
 | **NPM** | v11.6.2 |
 
-## 项目信息
+### 开发服务器
+
+```bash
+npm run dev          # 启动开发服务器
+# 本地: http://localhost:5173
+# 外网: http://194.238.27.79:5173
+```
+
+---
+
+## 生产环境 (阿里云 ECS)
 
 | 项目 | 值 |
 |------|-----|
-| **项目名** | `wdgl-react` (制度管理系统) |
-| **构建工具** | Vite 5.4.21 |
-| **框架** | React + Tiptap 编辑器 |
-| **部署方式** | 云服务器直连开发 |
+| **主机名** | `iZwz9cbthrgfp35dyxw9fyZ` |
+| **操作系统** | Debian GNU/Linux 12 (bookworm) |
+| **公网 IP** | `120.79.181.206` |
+| **CPU** | 2 核心 |
+| **内存** | 3.5 GB |
+| **磁盘** | 40 GB |
+| **Node.js** | v20.19.5 |
+| **Nginx** | 1.22.1 |
+| **PM2** | 6.0.13 |
 
-## 开发服务器
+### 服务端点
 
-```bash
-# 启动开发服务器
-npm run dev
+| 服务 | 端口 | 地址 |
+|------|------|------|
+| **前端应用** | 3000 | `http://120.79.181.206:3000` |
+| **协作服务器** | 1234 | `ws://120.79.181.206:1234` |
 
-# 服务器监听地址
-# - 本地: http://localhost:5173
-# - 外网: http://194.238.27.79:5173
+### 部署路径
+
+```
+/var/www/wdgl-01/
+├── dist/                    # 构建产物
+├── backend/                 # 协作服务器
+├── deploy/                  # 部署配置
+└── logs/                    # 日志目录
 ```
 
-## 生产构建
+### 常用运维命令
 
 ```bash
-npm run build    # 构建到 dist/
-npm run preview  # 预览生产版本
+# SSH 连接
+ssh root@120.79.181.206
+
+# 更新部署
+cd /var/www/wdgl-01
+git pull && npm install --legacy-peer-deps && npm run build
+pm2 restart wdgl-collab
+
+# 查看状态
+pm2 list
+pm2 logs wdgl-collab
 ```
 
-## 关键服务端点
+---
 
-| 服务 | 地址 |
+## 敏感信息管理
+
+> ⚠️ 以下文件已在 .gitignore 中排除，禁止提交到 Git
+
+| 文件 | 说明 |
 |------|------|
-| **开发服务器** | `http://194.238.27.79:5173` |
-| **WebSocket (协作)** | `ws://194.238.27.79:1234` ⚠️ 暂时禁用 |
-| **Supabase** | 通过 `@supabase/supabase-js` 连接 |
+| `.env` | 环境变量 |
+| `.env.production` | 生产环境变量 |
+| `.env.test` | 测试环境变量 |
+| `.env.local` | 本地环境变量 |
+
+### 敏感信息配置
+
+```bash
+# 在生产服务器上
+cp .env.example .env.production
+nano .env.production  # 填入真实密钥
+```
+
+---
 
 ## 注意事项
 
-1. **远程开发**: 代码直接在云服务器上编辑和运行
-2. **Vite 配置**: `server.host: '0.0.0.0'` 允许外网访问
-3. **协作功能**: 当前禁用 (`collaboration.enabled: false`)，启用会导致编辑器渲染循环问题
-4. **无 .env 文件**: API 密钥等需要单独配置
+1. **Supabase 配置**: 目前硬编码在 `src/services/supabase.js`，建议迁移到环境变量
+2. **SSH 密码**: 禁止写入代码，存储在本地密码管理器
+3. **HTTPS**: 建议后续配置 Let's Encrypt SSL 证书
