@@ -7,6 +7,7 @@ export default function SettingsModal({ isOpen, onClose }) {
     const [apiKey, setApiKey] = useState('');
     const [selectedModel, setSelectedModel] = useState('gemini-1.5-flash');
     const [availableModels, setAvailableModels] = useState([]);
+    const [autocompleteEnabled, setAutocompleteEnabled] = useState(true);
 
     useEffect(() => {
         if (isOpen) {
@@ -14,6 +15,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             const currentKey = localStorage.getItem('wdgl_ai_key') || '';
             setApiKey(currentKey);
             setSelectedModel(localStorage.getItem('wdgl_ai_model') || 'gemini-1.5-flash');
+            setAutocompleteEnabled(localStorage.getItem('wdgl_ai_autocomplete_enabled') !== 'false');
 
             if (currentKey) {
                 fetchModels(currentKey);
@@ -29,9 +31,12 @@ export default function SettingsModal({ isOpen, onClose }) {
     };
 
     const handleSaveAI = () => {
+        // 保存自动补全开关状态
+        localStorage.setItem('wdgl_ai_autocomplete_enabled', autocompleteEnabled.toString());
+
         if (apiKey.trim()) {
             aiService.initClient(apiKey.trim(), selectedModel);
-            alert(`AI 设置已保存！当前模型: ${selectedModel}`);
+            alert(`AI 设置已保存！\n模型: ${selectedModel}\n自动补全: ${autocompleteEnabled ? '已启用' : '已禁用'}`);
         } else {
             aiService.enableMockMode();
             alert('API Key 已移除，切换回模拟模式。');
@@ -145,6 +150,40 @@ export default function SettingsModal({ isOpen, onClose }) {
                                                 保存配置
                                             </button>
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* 自动补全设置 */}
+                                <div className="border-t border-gray-200 pt-6">
+                                    <h4 className="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
+                                        <Sparkles size={16} className="text-blue-500" />
+                                        自动补全设置
+                                    </h4>
+                                    <div className="space-y-4">
+                                        <label className="flex items-center justify-between cursor-pointer">
+                                            <div>
+                                                <span className="text-sm text-gray-700">启用 AI 自动补全</span>
+                                                <p className="text-xs text-gray-500 mt-0.5">
+                                                    输入时自动显示 AI 补全建议（快捷键：Cmd/Ctrl+Shift+Space 手动触发）
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                role="switch"
+                                                aria-checked={autocompleteEnabled}
+                                                onClick={() => setAutocompleteEnabled(!autocompleteEnabled)}
+                                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${autocompleteEnabled ? 'bg-purple-600' : 'bg-gray-200'
+                                                    }`}
+                                            >
+                                                <span
+                                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${autocompleteEnabled ? 'translate-x-5' : 'translate-x-0'
+                                                        }`}
+                                                />
+                                            </button>
+                                        </label>
+                                        <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-100">
+                                            ⚠️ 免费版 API 每分钟限制 5 次请求。如果频繁触发 429 错误，建议禁用自动补全，改用快捷键手动触发。
+                                        </p>
                                     </div>
                                 </div>
 

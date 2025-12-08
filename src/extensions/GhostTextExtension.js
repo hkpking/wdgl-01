@@ -8,7 +8,7 @@ export const GhostText = Extension.create({
 
     addOptions() {
         return {
-            debounce: 1000,
+            debounce: 2000, // 防抖延迟 2 秒，减少 API 调用频率
         };
     },
 
@@ -104,6 +104,10 @@ export const GhostText = Extension.create({
             const { selection } = state;
 
             if (!selection.empty) return;
+
+            // 检查自动补全是否启用
+            const autocompleteEnabled = localStorage.getItem('wdgl_ai_autocomplete_enabled') !== 'false';
+            if (!autocompleteEnabled && !manual) return; // 如果禁用且不是手动触发，直接返回
 
             // Smart Filter for Auto-Trigger
             if (!manual) {
@@ -327,11 +331,15 @@ export const GhostText = Extension.create({
                             // Debounce Auto-Trigger
                             if (debounceTimer) clearTimeout(debounceTimer);
 
+                            // 检查自动补全是否启用
+                            const autocompleteEnabled = localStorage.getItem('wdgl_ai_autocomplete_enabled') !== 'false';
+                            if (!autocompleteEnabled) return;
+
                             debounceTimer = setTimeout(() => {
                                 if (view.hasFocus()) {
                                     trigger(view, false); // false = auto trigger
                                 }
-                            }, 750); // Adjust debounce time as needed
+                            }, 2000); // 2秒延迟，减少 API 调用频率
                         }
                     };
                 },
