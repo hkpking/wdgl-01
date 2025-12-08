@@ -10,8 +10,13 @@
 
 @media print {
   @page {
-    margin: 2cm;
+    margin: 1.5cm 2cm;
     size: A4;
+  }
+
+  /* 首页不显示页眉页脚区域 */
+  @page :first {
+    margin-top: 2cm;
   }
 
   /* Universal hide class */
@@ -20,7 +25,10 @@
   nav,
   aside,
   .fixed,
-  .sticky {
+  .sticky,
+  button,
+  .search-result,
+  .search-result-current {
     display: none !important;
   }
 
@@ -54,10 +62,128 @@
     border: none !important;
   }
 
-  /* Ensure text is black */
+  /* 确保文字为黑色 */
   * {
     color: black !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* 标题样式 */
+  .ProseMirror h1 {
+    font-size: 24pt !important;
+    margin-top: 18pt !important;
+    margin-bottom: 12pt !important;
+    page-break-after: avoid !important;
+  }
+
+  .ProseMirror h2 {
+    font-size: 18pt !important;
+    margin-top: 14pt !important;
+    margin-bottom: 8pt !important;
+    page-break-after: avoid !important;
+  }
+
+  .ProseMirror h3,
+  .ProseMirror h4,
+  .ProseMirror h5,
+  .ProseMirror h6 {
+    page-break-after: avoid !important;
+  }
+
+  /* 段落 */
+  .ProseMirror p {
+    font-size: 12pt !important;
+    line-height: 1.6 !important;
+    margin: 6pt 0 !important;
+    orphans: 3 !important;
+    widows: 3 !important;
+  }
+
+  /* 表格打印优化 */
+  .ProseMirror table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    page-break-inside: auto !important;
+  }
+
+  .ProseMirror tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  .ProseMirror th,
+  .ProseMirror td {
+    border: 1px solid #333 !important;
+    padding: 6pt !important;
+    font-size: 10pt !important;
+  }
+
+  .ProseMirror th {
+    background-color: #f0f0f0 !important;
+    font-weight: bold !important;
+  }
+
+  /* 图片适配 */
+  .ProseMirror img {
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* 列表样式 */
+  .ProseMirror ul,
+  .ProseMirror ol {
+    margin-left: 20pt !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* 代码块 */
+  .ProseMirror pre {
+    background-color: #f5f5f5 !important;
+    border: 1px solid #ddd !important;
+    padding: 8pt !important;
+    font-size: 9pt !important;
+    page-break-inside: avoid !important;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+  }
+
+  .ProseMirror code {
+    color: #333 !important;
+    background-color: #f5f5f5 !important;
+  }
+
+  /* 引用块 */
+  .ProseMirror blockquote {
+    border-left: 3pt solid #999 !important;
+    padding-left: 12pt !important;
+    margin: 12pt 0 !important;
+    font-style: italic !important;
+    color: #555 !important;
+  }
+
+  /* 分隔线 */
+  .ProseMirror hr {
+    border: none !important;
+    border-top: 1pt solid #999 !important;
+    margin: 18pt 0 !important;
+  }
+
+  /* 链接显示URL */
+  .ProseMirror a {
+    text-decoration: underline !important;
+  }
+
+  .ProseMirror a::after {
+    content: " (" attr(href) ")" !important;
+    font-size: 8pt !important;
+    color: #666 !important;
+  }
+
+  /* 隐藏评论标记背景 */
+  .ProseMirror span[data-comment-id] {
+    background: transparent !important;
+    border: none !important;
   }
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MoreVertical, ChevronRight, ChevronDown, Check, X } from 'lucide-react';
+import { MoreVertical, ChevronRight, ChevronDown, Check, X, GitCompare } from 'lucide-react';
 import * as mockStorage from '../services/mockStorage';
+import VersionDiff from './VersionDiff';
 
 export default function VersionHistorySidebar({ docId, currentUser, onSelectVersion, currentVersionId, onClose }) {
     const [versions, setVersions] = useState([]);
@@ -12,6 +13,11 @@ export default function VersionHistorySidebar({ docId, currentUser, onSelectVers
     const [activeMenuVersionId, setActiveMenuVersionId] = useState(null);
     const menuRef = useRef(null);
     const inputRef = useRef(null);
+
+    // 版本对比状态
+    const [compareMode, setCompareMode] = useState(false);
+    const [compareOldVersion, setCompareOldVersion] = useState(null);
+    const [compareNewVersion, setCompareNewVersion] = useState(null);
 
     useEffect(() => {
         loadVersions();
@@ -94,6 +100,49 @@ export default function VersionHistorySidebar({ docId, currentUser, onSelectVers
         setEditingVersionId(null);
     };
 
+    // 版本对比处理
+    const handleStartCompare = (version) => {
+        setCompareMode(true);
+        setCompareOldVersion(version);
+        setCompareNewVersion(null); // 等待选择第二个版本
+        setActiveMenuVersionId(null);
+    };
+
+    const handleSelectCompareVersion = (version) => {
+        if (compareMode && compareOldVersion) {
+            if (version.id !== compareOldVersion.id) {
+                // 确保旧版本在前
+                const oldDate = new Date(compareOldVersion.savedAt);
+                const newDate = new Date(version.savedAt);
+                if (oldDate > newDate) {
+                    setCompareNewVersion(compareOldVersion);
+                    setCompareOldVersion(version);
+                } else {
+                    setCompareNewVersion(version);
+                }
+            }
+        }
+    };
+
+    const handleCloseCompare = () => {
+        setCompareMode(false);
+        setCompareOldVersion(null);
+        setCompareNewVersion(null);
+    };
+
+    // 如果正在对比，显示对比视图
+    if (compareMode && compareOldVersion && compareNewVersion) {
+        return (
+            <div className="w-[600px] h-full bg-white border-l border-gray-200 flex flex-col shadow-xl z-30">
+                <VersionDiff
+                    oldVersion={compareOldVersion}
+                    newVersion={compareNewVersion}
+                    onClose={handleCloseCompare}
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="w-80 h-full bg-white border-l border-gray-200 flex flex-col shadow-xl z-30">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
@@ -105,6 +154,25 @@ export default function VersionHistorySidebar({ docId, currentUser, onSelectVers
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
+                {/* 对比模式提示 */}
+                {compareMode && !compareNewVersion && (
+                    <div className="mb-4 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                        <div className="flex items-center gap-2 mb-1">
+                            <GitCompare size={14} />
+                            <span className="font-medium">选择要对比的版本</span>
+                        </div>
+                        <div className="text-xs text-yellow-600">
+                            已选择: {compareOldVersion?.name || formatDate(compareOldVersion?.savedAt)}
+                        </div>
+                        <button
+                            onClick={handleCloseCompare}
+                            className="mt-2 text-xs text-yellow-700 hover:underline"
+                        >
+                            取消对比
+                        </button>
+                    </div>
+                )}
+
                 {/* Current Version (Live) - Mock representation */}
                 <div className="mb-4">
                     <div className="flex items-center justify-between px-3 py-2 bg-blue-50 rounded-lg border border-blue-100 mb-2 cursor-pointer">
@@ -131,15 +199,27 @@ export default function VersionHistorySidebar({ docId, currentUser, onSelectVers
                                     const isSelected = currentVersionId === version.id;
                                     const isEditing = editingVersionId === version.id;
                                     const isMenuOpen = activeMenuVersionId === version.id;
+                                    const isCompareSource = compareOldVersion?.id === version.id;
+
+                                    const handleVersionClick = () => {
+                                        if (isEditing) return;
+                                        if (compareMode && !compareNewVersion) {
+                                            handleSelectCompareVersion(version);
+                                        } else {
+                                            onSelectVersion(version);
+                                        }
+                                    };
 
                                     return (
                                         <div
                                             key={version.id}
-                                            className={`group relative flex items-start justify-between p-3 rounded-lg cursor-pointer transition-colors border ${isSelected
-                                                    ? 'bg-blue-50 border-blue-200'
-                                                    : 'hover:bg-gray-50 border-transparent hover:border-gray-200'
+                                            className={`group relative flex items-start justify-between p-3 rounded-lg cursor-pointer transition-colors border ${isCompareSource
+                                                    ? 'bg-yellow-50 border-yellow-300'
+                                                    : isSelected
+                                                        ? 'bg-blue-50 border-blue-200'
+                                                        : 'hover:bg-gray-50 border-transparent hover:border-gray-200'
                                                 }`}
-                                            onClick={() => !isEditing && onSelectVersion(version)}
+                                            onClick={handleVersionClick}
                                         >
                                             <div className="flex-1 min-w-0">
                                                 {isEditing ? (
@@ -198,13 +278,20 @@ export default function VersionHistorySidebar({ docId, currentUser, onSelectVers
                                                     {isMenuOpen && (
                                                         <div
                                                             ref={menuRef}
-                                                            className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 w-32 py-1"
+                                                            className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 w-36 py-1"
                                                         >
                                                             <button
                                                                 onClick={() => handleStartRename(version)}
                                                                 className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
                                                             >
                                                                 命名此版本
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleStartCompare(version)}
+                                                                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                                            >
+                                                                <GitCompare size={14} />
+                                                                对比此版本
                                                             </button>
                                                         </div>
                                                     )}

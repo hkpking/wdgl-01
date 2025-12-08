@@ -243,3 +243,154 @@
     border-bottom: 2px solid #ca8a04;
     /* yellow-600 */
 }
+
+/* Suggestion Mode Styles */
+.ProseMirror .suggestion {
+    cursor: pointer;
+    position: relative;
+}
+
+/* Insert suggestion - green highlight */
+.ProseMirror .suggestion-insert {
+    background-color: #dcfce7;
+    border-bottom: 2px solid #22c55e;
+    color: #166534;
+}
+
+.ProseMirror .suggestion-insert:hover {
+    background-color: #bbf7d0;
+}
+
+/* Delete suggestion - red strikethrough */
+.ProseMirror .suggestion-delete {
+    background-color: #fee2e2;
+    text-decoration: line-through;
+    text-decoration-color: #ef4444;
+    color: #991b1b;
+}
+
+.ProseMirror .suggestion-delete:hover {
+    background-color: #fecaca;
+}
+
+/* Suggestion tooltip on hover */
+.ProseMirror .suggestion::after {
+    content: attr(data-author-name);
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background: #1f2937;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s;
+    z-index: 50;
+}
+
+.ProseMirror .suggestion:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Mention Styles */
+.ProseMirror .mention {
+    background-color: #dbeafe;
+    border-radius: 4px;
+    padding: 2px 4px;
+    color: #1d4ed8;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.ProseMirror .mention:hover {
+    background-color: #bfdbfe;
+}
+
+/* Mention List Popup */
+.mention-list {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 4px;
+    min-width: 200px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.mention-list-empty {
+    padding: 12px;
+    color: #9ca3af;
+    font-size: 14px;
+    text-align: center;
+}
+
+.mention-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 6px;
+    text-align: left;
+}
+
+.mention-item:hover,
+.mention-item.is-selected {
+    background-color: #f3f4f6;
+}
+
+.mention-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.mention-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.mention-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1f2937;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mention-email {
+    font-size: 12px;
+    color: #9ca3af;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Search & Replace Styles */
+.ProseMirror .search-result {
+    background-color: #fef08a;
+    /* yellow-200 */
+    border-radius: 2px;
+}
+
+.ProseMirror .search-result-current {
+    background-color: #fb923c;
+    /* orange-400 */
+    color: white;
+    border-radius: 2px;
+}

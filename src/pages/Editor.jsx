@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Clock, ArrowLeft, RotateCcw, MessageSquarePlus, Sparkles } from 'lucide-react';
 import RichTextEditor from '../components/RichTextEditor';
-import StructuredEditor from '../components/StructuredEditor/StructuredEditor';
+// import StructuredEditor from '../components/StructuredEditor/StructuredEditor'; // Removed
 import DocHeader from '../components/DocHeader';
 import DocToolbar from '../components/DocToolbar';
 import DocOutline from '../components/DocOutline';
@@ -12,7 +12,7 @@ import CommentSidebar from '../components/Comments/CommentSidebar';
 import AISidebar from '../components/AI/AISidebar';
 import MagicCommand from '../components/AI/MagicCommand';
 import { getTextContent, isPlainText, plainTextToHtml } from '../utils/editor';
-import { htmlToBlocks, blocksToHtml } from '../utils/blockConverter';
+// import { htmlToBlocks, blocksToHtml } from '../utils/blockConverter'; // Removed
 import { useStorage } from '../contexts/StorageContext';
 import { useDocumentData } from '../hooks/useDocumentData';
 import { useAutoSave } from '../hooks/useAutoSave';
@@ -21,6 +21,9 @@ import { DOC_STATUS, STATUS_LABELS } from '../utils/constants';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useDocumentExport } from '../hooks/useDocumentExport';
 import { importWordDoc } from '../utils/ImportHandler';
+import { useCollaboration } from '../hooks/useCollaboration';
+import CollaborationStatus from '../components/shared/CollaborationStatus';
+import EditModeSelector from '../components/EditModeSelector';
 
 export default function Editor() {
     const { id } = useParams();
@@ -32,7 +35,7 @@ export default function Editor() {
 
     const [title, setTitle] = useState('');
     const [content, setContent] = useState(''); // Keep for backward compatibility / export
-    const [blocks, setBlocks] = useState([]); // New block state
+
     const [status, setStatus] = useState(DOC_STATUS.DRAFT);
     const [wordCount, setWordCount] = useState(0);
     const [editorInstance, setEditorInstance] = useState(null);
@@ -44,6 +47,36 @@ export default function Editor() {
     // Export hook
     const { exportAsPDF } = useDocumentExport();
 
+    // Collaboration hook
+    const {
+        ydoc,
+        provider,
+        isConnected,
+        connectedUsers,
+        connectionError,
+        reconnectAttempts,
+        reconnect
+    } = useCollaboration(id, currentUser);
+
+    // 稳定的用户颜色（只在用户变化时重新生成）
+    const userColor = useMemo(() => {
+        return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    }, [currentUser?.uid]);
+
+    // 稳定的协作配置（避免每次渲染创建新对象）
+    const collaborationConfig = useMemo(() => {
+        if (!ydoc || !provider) return null;
+        return {
+            ydoc,
+            provider,
+            user: currentUser ? {
+                id: currentUser.uid,
+                name: currentUser.displayName || currentUser.email,
+                color: userColor
+            } : null
+        };
+    }, [ydoc, provider, currentUser, userColor]);
+
     // Comment System State
     const [comments, setComments] = useState([]);
     const [isCommentSidebarOpen, setIsCommentSidebarOpen] = useState(false);
@@ -52,20 +85,41 @@ export default function Editor() {
     const [activeCommentId, setActiveCommentId] = useState(null);
     const [newCommentDraft, setNewCommentDraft] = useState(null);
 
+    // Edit Mode State (编辑模式/建议模式)
+    const [editMode, setEditMode] = useState('editing'); // 'editing' | 'suggesting'
+
     // Document Data Hook
     const { document: loadedDoc, loading, error, reload } = useDocumentData(id, currentUser);
 
+    // 追踪已处理的文档，避免重复设置状态
+    const processedDocRef = React.useRef(null);
+
     useEffect(() => {
-        if (loadedDoc) {
-            setTitle(loadedDoc.title || '');
-            setContent(loadedDoc.content || '');
-            setBlocks(loadedDoc.blocks || []);
-            setStatus(loadedDoc.status || DOC_STATUS.DRAFT);
-            // Load Comments
-            const loadedComments = storage.getComments(currentUser.uid, id);
-            setComments(loadedComments);
+        // 如果 loadedDoc 没有变化或已经处理过，跳过
+        if (!loadedDoc || processedDocRef.current === loadedDoc.id) {
+            return;
         }
-    }, [loadedDoc, id, currentUser?.uid, storage]);
+
+        // 标记这个文档已处理
+        processedDocRef.current = loadedDoc.id;
+
+        setTitle(loadedDoc.title || '');
+        setContent(loadedDoc.content || '');
+        setStatus(loadedDoc.status || DOC_STATUS.DRAFT);
+
+        // 异步加载评论
+        const loadComments = async () => {
+            try {
+                const loadedComments = await storage.getComments(currentUser.uid, id);
+                setComments(loadedComments || []);
+            } catch (err) {
+                console.error('加载评论失败:', err);
+                setComments([]);
+            }
+        };
+        loadComments();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loadedDoc?.id]);
 
     // Update browser tab title
     useEffect(() => {
@@ -90,16 +144,25 @@ export default function Editor() {
         isVersionHistoryOpen
     );
 
-    useEffect(() => {
-        console.log('[Editor] Render');
-    });
+    // Debug log removed to prevent console spam
 
     const handleImport = async (file) => {
         try {
             const html = await importWordDoc(file);
-            const newBlocks = htmlToBlocks(html);
-            // Append new blocks
-            setBlocks(prev => [...prev, ...newBlocks]);
+            // Directly set imported HTML
+            if (editorInstance) {
+                editorInstance.commands.setContent(html);
+            } else {
+                setContent(html);
+            }
+
+            // Set title if empty to ensure auto-save works
+            if (!title || !title.trim()) {
+                // Remove extension from filename
+                const fileName = file.name.replace(/\.[^/.]+$/, "");
+                setTitle(fileName);
+            }
+
             alert('导入成功！');
         } catch (error) {
             console.error('Import failed:', error);
@@ -109,23 +172,21 @@ export default function Editor() {
 
     // Comment Handlers
     const handleAddComment = () => {
-        alert('评论功能正在适配新编辑器，暂时不可用');
-        return;
-        // if (!editorInstance) return;
-        // const { from, to, empty } = editorInstance.state.selection;
+        if (!editorInstance) return;
+        const { from, to, empty } = editorInstance.state.selection;
 
-        // if (empty) {
-        //     alert('请先选择要评论的文本');
-        //     return;
-        // }
+        if (empty) {
+            alert('请先选择要评论的文本');
+            return;
+        }
 
-        // const quote = editorInstance.state.doc.textBetween(from, to, ' ');
-        // setIsCommentSidebarOpen(true);
-        // setIsAISidebarOpen(false); // Close AI sidebar if opening comments
-        // setNewCommentDraft({ quote, from, to });
+        const quote = editorInstance.state.doc.textBetween(from, to, ' ');
+        setIsCommentSidebarOpen(true);
+        setIsAISidebarOpen(false); // Close AI sidebar if opening comments
+        setNewCommentDraft({ quote, from, to });
     };
 
-    const handleSubmitComment = (content) => {
+    const handleSubmitComment = async (content) => {
         if (!newCommentDraft || !currentUser) return;
 
         const commentData = {
@@ -138,17 +199,37 @@ export default function Editor() {
             }
         };
 
-        const newComment = storage.addComment(currentUser.uid, id, commentData);
-        setComments([...comments, newComment]);
+        try {
+            const newComment = await storage.addComment(currentUser.uid, id, commentData);
 
-        // Add Mark to Editor - Disabled for Block Editor
-        // editorInstance.chain().focus().setTextSelection({ from: newCommentDraft.from, to: newCommentDraft.to }).setComment({ commentId: newComment.id }).run();
+            if (!newComment) {
+                console.error('添加评论失败');
+                alert('评论保存失败，请重试');
+                return;
+            }
 
-        setNewCommentDraft(null);
-        setActiveCommentId(newComment.id);
+            setComments([...comments, newComment]);
+
+            // Add CommentMark to selected text
+            if (editorInstance && newCommentDraft.from && newCommentDraft.to) {
+                editorInstance.chain()
+                    .focus()
+                    .setTextSelection({ from: newCommentDraft.from, to: newCommentDraft.to })
+                    .setComment({ commentId: newComment.id })
+                    // 关键修复：设置标记后将光标移到标记末尾之外，避免后续输入继承高亮
+                    .setTextSelection(newCommentDraft.to)
+                    .run();
+            }
+
+            setNewCommentDraft(null);
+            setActiveCommentId(newComment.id);
+        } catch (error) {
+            console.error('添加评论失败:', error);
+            alert('评论保存失败，请重试');
+        }
     };
 
-    const handleReply = (commentId, content) => {
+    const handleReply = async (commentId, content) => {
         if (!currentUser) return;
         const replyData = {
             content,
@@ -157,36 +238,82 @@ export default function Editor() {
                 name: currentUser.displayName || currentUser.email
             }
         };
-        const newReply = storage.addReply(currentUser.uid, id, commentId, replyData);
 
-        // Update local state
-        setComments(comments.map(c => {
-            if (c.id === commentId) {
-                return { ...c, replies: [...c.replies, newReply] };
-            }
-            return c;
-        }));
-    };
+        try {
+            const newReply = await storage.addReply(currentUser.uid, id, commentId, replyData);
+            if (!newReply) return;
 
-    const handleResolve = (commentId) => {
-        const updatedComment = storage.updateCommentStatus(currentUser.uid, id, commentId, 'resolved');
-        setComments(comments.map(c => c.id === commentId ? updatedComment : c));
-    };
-
-    const handleDelete = (commentId) => {
-        if (window.confirm('确定要删除这条评论吗？')) {
-            storage.deleteComment(currentUser.uid, id, commentId);
-            setComments(comments.filter(c => c.id !== commentId));
-
-            // Remove Mark from Editor (This is tricky without knowing exact range, 
-            // but Tiptap marks are part of the document content. 
-            // We need to find marks with this commentId and unset them.
-            // For now, we rely on the user manually removing it or we implement a 'unsetComment' command that scans doc.)
-            // Simplified: Just remove from list. The mark stays until manually removed or we implement advanced removal.
-            // Better: We can traverse the doc to find the mark.
-            // For MVP, let's leave the mark but it won't link to anything valid, or we can try to remove it if active.
+            // Update local state
+            setComments(comments.map(c => {
+                if (c.id === commentId) {
+                    return { ...c, replies: [...(c.replies || []), newReply] };
+                }
+                return c;
+            }));
+        } catch (error) {
+            console.error('添加回复失败:', error);
         }
     };
+
+    const handleResolve = async (commentId) => {
+        try {
+            const result = await storage.updateCommentStatus(currentUser.uid, id, commentId, 'resolved');
+            if (result) {
+                setComments(comments.map(c => c.id === commentId ? { ...c, status: 'resolved' } : c));
+            }
+        } catch (error) {
+            console.error('更新评论状态失败:', error);
+        }
+    };
+
+    const handleDelete = async (commentId) => {
+        if (window.confirm('确定要删除这条评论吗？')) {
+            try {
+                await storage.deleteComment(currentUser.uid, id, commentId);
+                setComments(comments.filter(c => c.id !== commentId));
+            } catch (error) {
+                console.error('删除评论失败:', error);
+            }
+        }
+    };
+
+    // 点击侧边栏评论跳转到文档对应位置
+    const handleSelectComment = (commentId) => {
+        setActiveCommentId(commentId);
+
+        if (!editorInstance) return;
+
+        // 查找文档中带有此 commentId 的标记位置
+        const { doc } = editorInstance.state;
+        let foundPos = null;
+
+        doc.descendants((node, pos) => {
+            if (foundPos) return false; // 已找到，停止搜索
+
+            node.marks.forEach(mark => {
+                if (mark.type.name === 'comment' && mark.attrs.commentId === commentId) {
+                    foundPos = pos;
+                }
+            });
+        });
+
+        if (foundPos !== null) {
+            // 滚动到该位置并高亮
+            editorInstance.chain().focus().setTextSelection(foundPos).run();
+
+            // 添加临时高亮效果：给当前选中的评论添加 active 类
+            const commentElements = document.querySelectorAll(`[data-comment-id="${commentId}"]`);
+            commentElements.forEach(el => {
+                el.classList.add('active-comment');
+                setTimeout(() => el.classList.remove('active-comment'), 2000);
+            });
+        }
+    };
+
+    // Magic Command - 使用 useCallback 确保引用稳定，避免编辑器重建
+    const handleOpenMagicCommand = useCallback(() => {
+        setIsMagicCommandOpen(true);
+    }, []);
 
     const toggleAISidebar = () => {
         setIsAISidebarOpen(!isAISidebarOpen);
@@ -360,6 +487,22 @@ export default function Editor() {
                     content={content} // Pass content for export
                     editor={editorInstance}
                 >
+                    {/* 协作状态 */}
+                    <CollaborationStatus
+                        connectedUsers={connectedUsers}
+                        isConnected={isConnected}
+                        connectionError={connectionError}
+                        reconnectAttempts={reconnectAttempts}
+                        onReconnect={reconnect}
+                    />
+
+                    {/* 编辑模式切换 */}
+                    <EditModeSelector
+                        mode={editMode}
+                        onChange={setEditMode}
+                        currentUser={currentUser}
+                    />
+
                     <button
                         onClick={toggleAISidebar}
                         className={`p-2 rounded-lg transition mr-2 flex items-center gap-1 ${isAISidebarOpen ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
@@ -393,7 +536,8 @@ export default function Editor() {
                                 onChange={setContent}
                                 editable={canEdit}
                                 onEditorReady={setEditorInstance}
-                                onMagicCommand={() => setIsMagicCommandOpen(true)}
+                                onMagicCommand={handleOpenMagicCommand}
+                                collaboration={collaborationConfig}
                             />
                         </div>
                     </div>
@@ -445,6 +589,8 @@ export default function Editor() {
                                 newCommentDraft={newCommentDraft}
                                 onCancelDraft={() => setNewCommentDraft(null)}
                                 onSubmitDraft={handleSubmitComment}
+                                onSelectComment={handleSelectComment}
+                                users={connectedUsers} // 协作用户列表用于 @提及
                             />
                         </div>
                     )

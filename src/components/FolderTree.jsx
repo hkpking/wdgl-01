@@ -1,20 +1,13 @@
 import React, { useState } from 'react';
-import { useDroppable } from '@dnd-kit/core';
-import { ChevronRight, ChevronDown, Folder, FolderOpen, MoreVertical, Plus, Edit2, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FolderOpen, MoreVertical, Plus } from 'lucide-react';
 
 const FolderItem = ({ folder, level = 0, isSelected, onSelect, onToggle, isExpanded, subFolders, onAction }) => {
     const paddingLeft = `${level * 16 + 12}px`;
 
-    const { setNodeRef, isOver } = useDroppable({
-        id: folder.id,
-        data: { type: 'folder', folder }
-    });
-
     return (
         <div>
             <div
-                ref={setNodeRef}
-                className={`flex items-center py-2 px-2 cursor-pointer hover:bg-gray-100 group ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-gray-700'} ${isOver ? 'bg-blue-100 ring-2 ring-blue-300' : ''}`}
+                className={`flex items-center py-2 px-2 cursor-pointer hover:bg-gray-100 group ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
                 style={{ paddingLeft }}
                 onClick={() => onSelect(folder)}
             >

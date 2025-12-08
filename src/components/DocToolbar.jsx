@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Bold, Italic, Underline, Strikethrough, Code, List, ListOrdered, CheckSquare,
     Quote, SquareCode, MessageSquarePlus, Undo, Redo, Link as LinkIcon, Image as ImageIcon,
@@ -8,19 +8,10 @@ import {
     Highlighter, Palette, Baseline, Printer, PaintRoller, SpellCheck,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Trash2, Merge, Split, X
 } from 'lucide-react';
-import { uploadImage } from '../utils/editor';
-import * as mockStorage from '../services/mockStorage';
+import { COLORS, ToolbarButton, ToolbarSeparator } from './shared';
+import { useImageUpload } from '../hooks/useImageUpload';
 
-const COLORS = [
-    '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3', '#ffffff',
-    '#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff', '#9900ff', '#ff00ff',
-    '#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3', '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc',
-    '#dd7e6b', '#ea9999', '#f9cb9c', '#ffe599', '#b6d7a8', '#a2c4c9', '#a4c2f4', '#9fc5e8', '#b4a7d6', '#d5a6bd',
-    '#cc4125', '#e06666', '#f6b26b', '#ffd966', '#93c47d', '#76a5af', '#6d9eeb', '#6fa8dc', '#8e7cc3', '#c27ba0',
-    '#a61c00', '#cc0000', '#e69138', '#f1c232', '#6aa84f', '#45818e', '#3c78d8', '#3d85c6', '#674ea7', '#a64d79',
-    '#85200c', '#990000', '#b45f06', '#bf9000', '#38761d', '#134f5c', '#1155cc', '#0b5394', '#351c75', '#741b47',
-    '#5b0f00', '#660000', '#783f04', '#7f6000', '#274e13', '#0c343d', '#1c4587', '#073763', '#20124d', '#4c1130'
-];
+// COLORS 已移至 shared/colors.js
 
 export default function DocToolbar({ editor, onAddComment }) {
     const [showHeadingMenu, setShowHeadingMenu] = useState(false);
@@ -31,24 +22,22 @@ export default function DocToolbar({ editor, onAddComment }) {
     const [showHighlightMenu, setShowHighlightMenu] = useState(false);
     const [showLinkInput, setShowLinkInput] = useState(false);
     const [linkUrl, setLinkUrl] = useState('');
-    const [uploading, setUploading] = useState(false);
 
     // Insert Menu State
     const [showInsertMenu, setShowInsertMenu] = useState(false);
     const [showTablePicker, setShowTablePicker] = useState(false);
     const [tableSize, setTableSize] = useState({ rows: 0, cols: 0 });
 
-    const fileInputRef = useRef(null);
-    const insertMenuRef = useRef(null);
-    const headingMenuRef = useRef(null); // New ref for heading menu
-    const fontFamilyMenuRef = useRef(null);
-    const fontSizeMenuRef = useRef(null);
-    const lineHeightMenuRef = useRef(null);
-    const colorMenuRef = useRef(null);
-    const highlightMenuRef = useRef(null);
-    const colorInputRef = useRef(null);
-    const highlightInputRef = useRef(null);
-    const currentUser = mockStorage.getCurrentUser();
+    // 使用共享的图片上传 Hook
+    const { fileInputRef, handleImageUpload, triggerUpload } = useImageUpload(editor);
+
+    const insertMenuRef = React.useRef(null);
+    const headingMenuRef = React.useRef(null);
+    const fontFamilyMenuRef = React.useRef(null);
+    const fontSizeMenuRef = React.useRef(null);
+    const lineHeightMenuRef = React.useRef(null);
+    const colorMenuRef = React.useRef(null);
+    const highlightMenuRef = React.useRef(null);
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -84,36 +73,7 @@ export default function DocToolbar({ editor, onAddComment }) {
         return null;
     }
 
-    const handleImageUpload = async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setUploading(true);
-            try {
-                const url = await uploadImage(file, currentUser?.uid);
-                editor.chain().focus().setImage({ src: url }).run();
-            } catch (error) {
-                console.error("Upload failed:", error);
-                alert("图片上传失败");
-            }
-            setUploading(false);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
-        }
-    };
-
-    const addImage = () => {
-        fileInputRef.current?.click();
-    };
-
-    const addImageViaUrl = () => {
-        const url = window.prompt('请输入图片 URL:');
-        if (url) {
-            editor.chain().focus().setImage({ src: url }).run();
-        }
-    };
-
-    const setLink = () => {
+    const handleSetLink = () => {
         if (linkUrl) {
             editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl }).run();
             setLinkUrl('');
@@ -121,22 +81,7 @@ export default function DocToolbar({ editor, onAddComment }) {
         }
     };
 
-    const ToolbarButton = ({ onClick, isActive = false, disabled = false, title, children, className = "" }) => (
-        <button
-            onClick={onClick}
-            onMouseDown={(e) => e.preventDefault()}
-            disabled={disabled}
-            title={title}
-            className={`p-1.5 rounded-[4px] transition-colors flex items-center justify-center min-w-[28px] h-[28px] ${isActive ? 'bg-[#e8f0fe] text-[#1a73e8]' : 'text-[#444746] hover:bg-[#f0f4f8]'
-                } ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
-        >
-            {children}
-        </button>
-    );
-
-    const ToolbarSeparator = () => (
-        <div className="w-[1px] h-[20px] bg-[#c7c7c7] mx-1 self-center"></div>
-    );
+    // ToolbarButton 和 ToolbarSeparator 已从 shared/ 导入，使用 google-docs variant
 
     const isTableActive = editor.isActive('table');
 
@@ -368,10 +313,10 @@ export default function DocToolbar({ editor, onAddComment }) {
                         onChange={(e) => setLinkUrl(e.target.value)}
                         placeholder="输入链接..."
                         className="border border-gray-300 rounded px-2 py-1 text-sm flex-1"
-                        onKeyDown={(e) => e.key === 'Enter' && setLink()}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSetLink()}
                         autoFocus
                     />
-                    <button onClick={setLink} className="bg-blue-500 text-white px-2 py-1 rounded text-sm">确定</button>
+                    <button onClick={handleSetLink} className="bg-blue-500 text-white px-2 py-1 rounded text-sm">确定</button>
                 </div>
             )}
 
@@ -396,7 +341,7 @@ export default function DocToolbar({ editor, onAddComment }) {
                 </button>
                 {showInsertMenu && (
                     <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg p-1 flex flex-col gap-1 z-20 min-w-[180px]">
-                        <button onClick={() => { addImage(); setShowInsertMenu(false); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+                        <button onClick={() => { triggerUpload(); setShowInsertMenu(false); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
                             <ImageIcon size={14} /> 图片
                         </button>
                         <button onClick={() => { setShowTablePicker(!showTablePicker); }} className="text-left px-3 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 justify-between group relative">

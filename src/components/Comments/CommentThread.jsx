@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, Check, Trash2, CornerDownRight } from 'lucide-react';
 import { format } from 'date-fns';
 
-export default function CommentThread({ comment, currentUser, onReply, onResolve, onDelete, isActive }) {
+export default function CommentThread({ comment, currentUser, onReply, onResolve, onDelete, isActive, onSelect }) {
     const [replyContent, setReplyContent] = useState('');
 
     const handleSubmitReply = (e) => {
@@ -12,8 +12,18 @@ export default function CommentThread({ comment, currentUser, onReply, onResolve
         setReplyContent('');
     };
 
+    // 点击评论跳转到文档对应位置
+    const handleClick = () => {
+        if (onSelect) {
+            onSelect(comment.id);
+        }
+    };
+
     return (
-        <div className={`bg-white rounded-lg shadow-sm border transition-all ${isActive ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200 hover:border-gray-300'}`}>
+        <div
+            className={`bg-white rounded-lg shadow-sm border transition-all cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200 hover:border-gray-300'}`}
+            onClick={handleClick}
+        >
             {/* Main Comment */}
             <div className="p-3">
                 <div className="flex justify-between items-start mb-2">

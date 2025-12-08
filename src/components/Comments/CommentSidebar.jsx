@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { MessageSquarePlus, X } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { MessageSquarePlus, X, User, CheckCircle, Clock } from 'lucide-react';
 import CommentThread from './CommentThread';
+import MentionInput from './MentionInput';
 
 export default function CommentSidebar({
     comments,
@@ -13,11 +14,43 @@ export default function CommentSidebar({
     onClose,
     newCommentDraft,
     onCancelDraft,
-    onSubmitDraft
+    onSubmitDraft,
+    onSelectComment,
+    users = [] // 協作用户列表，用于 @提及
 }) {
-    const [filter, setFilter] = useState('open'); // 'open', 'resolved'
+    const [filter, setFilter] = useState('all'); // 'all', 'open', 'resolved', 'mine'
+    const [commentContent, setCommentContent] = useState(''); // 新评论内容
+    const [mentionedUsers, setMentionedUsers] = useState([]); // 被提及的用户
 
-    const filteredComments = comments.filter(c => c.status === filter);
+    // 统计信息
+    const stats = useMemo(() => {
+        const all = comments.length;
+        const open = comments.filter(c => c.status === 'open').length;
+        const resolved = comments.filter(c => c.status === 'resolved').length;
+        const mine = comments.filter(c => c.author?.uid === currentUser?.uid).length;
+        return { all, open, resolved, mine };
+    }, [comments, currentUser?.uid]);
+
+    // 筛选评论
+    const filteredComments = useMemo(() => {
+        switch (filter) {
+            case 'open':
+                return comments.filter(c => c.status === 'open');
+            case 'resolved':
+                return comments.filter(c => c.status === 'resolved');
+            case 'mine':
+                return comments.filter(c => c.author?.uid === currentUser?.uid);
+            default:
+                return comments;
+        }
+    }, [comments, filter, currentUser?.uid]);
+
+    const filterOptions = [
+        { key: 'all', label: '全部', count: stats.all, icon: MessageSquarePlus },
+        { key: 'open', label: '进行中', count: stats.open, icon: Clock },
+        { key: 'resolved', label: '已解决', count: stats.resolved, icon: CheckCircle },
+        { key: 'mine', label: '我的', count: stats.mine, icon: User },
+    ];
 
     return (
         <div className="w-80 bg-gray-50 border-l border-gray-200 h-full flex flex-col shadow-xl z-30">
@@ -25,7 +58,10 @@ export default function CommentSidebar({
             <div className="p-4 border-b border-gray-200 bg-white flex justify-between items-center">
                 <h2 className="font-semibold text-gray-700 flex items-center gap-2">
                     <MessageSquarePlus size={18} />
-                    评论 ({comments.filter(c => c.status === 'open').length})
+                    评论
+                    <span className="text-xs font-normal text-gray-400">
+                        ({stats.open} 进行中)
+                    </span>
                 </h2>
                 <button
                     onClick={onClose}
@@ -36,19 +72,24 @@ export default function CommentSidebar({
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex border-b border-gray-200 bg-white">
-                <button
-                    className={`flex-1 py-2 text-sm font-medium ${filter === 'open' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                    onClick={() => setFilter('open')}
-                >
-                    进行中
-                </button>
-                <button
-                    className={`flex-1 py-2 text-sm font-medium ${filter === 'resolved' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                    onClick={() => setFilter('resolved')}
-                >
-                    已解决
-                </button>
+            <div className="flex border-b border-gray-200 bg-white overflow-x-auto">
+                {filterOptions.map(opt => (
+                    <button
+                        key={opt.key}
+                        className={`flex-1 min-w-0 py-2 px-2 text-xs font-medium flex items-center justify-center gap-1 transition
+                            ${filter === opt.key
+                                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
+                        onClick={() => setFilter(opt.key)}
+                    >
+                        <opt.icon size={12} />
+                        <span className="truncate">{opt.label}</span>
+                        <span className={`text-xs ${filter === opt.key ? 'text-blue-500' : 'text-gray-400'}`}>
+                            {opt.count}
+                        </span>
+                    </button>
+                ))}
             </div>
 
             {/* Comments List */}
@@ -64,26 +105,49 @@ export default function CommentSidebar({
                         )}
                         <form onSubmit={(e) => {
                             e.preventDefault();
-                            const content = e.target.elements.content.value;
-                            if (content.trim()) onSubmitDraft(content);
+                            if (commentContent.trim()) {
+                                onSubmitDraft(commentContent, mentionedUsers);
+                                setCommentContent('');
+                                setMentionedUsers([]);
+                            }
                         }}>
-                            <textarea
-                                name="content"
+                            <MentionInput
+                                value={commentContent}
+                                onChange={setCommentContent}
+                                users={users}
+                                onMention={setMentionedUsers}
+                                placeholder="输入评论，使用 @ 提及用户..."
+                                className="text-sm p-2 border border-gray-200 rounded mb-2 focus:outline-none focus:border-blue-400"
                                 autoFocus
-                                placeholder="输入评论..."
-                                className="w-full text-sm p-2 border border-gray-200 rounded mb-2 focus:outline-none focus:border-blue-400 resize-none h-20"
                             />
+                            {mentionedUsers.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                    {mentionedUsers.map(user => (
+                                        <span
+                                            key={user.id}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full"
+                                        >
+                                            @{user.name}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                             <div className="flex justify-end gap-2">
                                 <button
                                     type="button"
-                                    onClick={onCancelDraft}
+                                    onClick={() => {
+                                        onCancelDraft();
+                                        setCommentContent('');
+                                        setMentionedUsers([]);
+                                    }}
                                     className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded"
                                 >
                                     取消
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded"
+                                    disabled={!commentContent.trim()}
+                                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-50"
                                 >
                                     评论
                                 </button>
@@ -95,7 +159,10 @@ export default function CommentSidebar({
                 {/* Existing Comments */}
                 {filteredComments.length === 0 && !newCommentDraft && (
                     <div className="text-center text-gray-400 py-8 text-sm">
-                        {filter === 'open' ? '暂无进行中的评论' : '暂无已解决的评论'}
+                        {filter === 'all' && '暂无评论'}
+                        {filter === 'open' && '暂无进行中的评论'}
+                        {filter === 'resolved' && '暂无已解决的评论'}
+                        {filter === 'mine' && '暂无我的评论'}
                     </div>
                 )}
 
@@ -108,6 +175,7 @@ export default function CommentSidebar({
                         onReply={onReply}
                         onResolve={onResolve}
                         onDelete={onDelete}
+                        onSelect={onSelectComment}
                     />
                 ))}
             </div>

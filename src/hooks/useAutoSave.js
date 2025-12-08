@@ -8,6 +8,10 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
     const [lastSaved, setLastSaved] = useState(null);
     const [lastSavedState, setLastSavedState] = useState(null);
 
+    // 使用 ref 存储 storage，避免作为依赖导致的重渲染
+    const storageRef = useRef(storage);
+    storageRef.current = storage;
+
     // Initialize lastSavedState when document loads
     useEffect(() => {
         if (documentState && !lastSavedState) {
@@ -24,32 +28,21 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
 
         setSaving(true);
         try {
-            let htmlContent;
-            let contentType = 'html';
-
-            if (documentState.blocks && documentState.blocks.length > 0) {
-                htmlContent = blocksToHtml(documentState.blocks);
-                contentType = 'blocks';
-            } else {
-                htmlContent = documentState.content;
-            }
-
             const docData = {
                 title: documentState.title,
-                content: htmlContent,
-                blocks: documentState.blocks || [], // Optional if using HTML
+                content: documentState.content,
                 status: documentState.status,
-                contentType: contentType
+                contentType: 'html'
             };
 
-            console.log('[SAVE] Saving document:', docData);
-            storage.saveDocument(currentUser.uid, id, docData);
+            console.log('[SAVE] Saving document:', id);
+            // 使用 await 等待异步操作完成
+            await storageRef.current.saveDocument(currentUser.uid, id, docData);
 
             // Save version history
-            storage.saveVersion(currentUser.uid, id, {
+            await storageRef.current.saveVersion(currentUser.uid, id, {
                 title: documentState.title,
-                content: htmlContent,
-                blocks: documentState.blocks || [],
+                content: documentState.content,
                 status: documentState.status
             });
 
@@ -57,23 +50,22 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
             setLastSaved(now);
             setLastSavedState({
                 title: documentState.title,
-                content: htmlContent
+                content: documentState.content
             });
 
+            console.log('[SAVE] Document saved successfully');
         } catch (error) {
             console.error('[SAVE] Error saving:', error);
             alert(error.message);
         } finally {
             setSaving(false);
         }
-    }, [id, currentUser?.uid, documentState, storage]);
+    }, [id, currentUser?.uid, documentState]); // 移除 storage 依赖
 
     // Check if content has changed
     const isDirty = documentState && lastSavedState ? (
         documentState.title !== lastSavedState.title ||
-        (documentState.blocks && documentState.blocks.length > 0
-            ? blocksToHtml(documentState.blocks) !== lastSavedState.content
-            : documentState.content !== lastSavedState.content)
+        documentState.content !== lastSavedState.content
     ) : false;
 
     // Auto-save effect

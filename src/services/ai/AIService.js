@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { PromptRegistry } from './PromptRegistry';
 
 /**
  * AI Service for handling interactions with LLMs (Gemini).
@@ -78,26 +79,8 @@ class AIService {
             // Use the currently selected model (user preference)
             const completionModel = this.model;
 
-            const prompt = `
-You are an intelligent writing assistant.
-Your task is to complete the user's sentence or paragraph naturally.
-Use the provided context to understand the tone and topic.
 
-Rules:
-1. Output ONLY the completion text.
-2. Do NOT repeat the input text.
-3. If the input ends in the middle of a sentence, complete it.
-4. If the input is a new line, suggest the next logical sentence based on context.
-5. Keep it concise (max 1-2 sentences).
-6. If the input is complete and no obvious continuation exists, return empty string.
-
-Context (Previous 500 chars):
-"${context}"
-
-Current Input (The user just typed):
-"${text}"
-
-Completion:`;
+            const prompt = PromptRegistry.AUTOCOMPLETE(context, text);
 
             const result = await completionModel.generateContent(prompt);
             const response = await result.response;
@@ -126,31 +109,8 @@ Completion:`;
 
         try {
             const completionModel = this.model;
-            const prompt = `
-You are a sophisticated AI writing assistant embedded in a document editor.
-Your goal is to providing seamless, context-aware text completion that feels like the user's own thought process.
 
-**Context:**
-The user is writing a document.
-Previous content (Context):
-"""
-${context}
-"""
-
-Current active block content (The user just typed):
-"${text}"
-
-**Instructions:**
-1.  **Seamless Continuation**: Complete the current sentence or start the next logical sentence. The transition must be grammatically perfect.
-2.  **No Repetition**: NEVER repeat the text from "Current active block content". Start EXACTLY where the user left off.
-3.  **Tone Matching**: Analyze the "Previous content" to match the user's writing style, vocabulary, and tone.
-4.  **Conciseness**: Suggest 1-3 sentences maximum. Don't write a whole paragraph unless it's clearly a heading implying a section.
-5.  **Formatting**: Do not use markdown (like **bold**) unless appropriate for the document structure.
-6.  **Silence**: If the input is complete and ambiguous, or if you are unsure, output NOTHING (empty string). Do not hallucinate random text.
-
-**Output:**
-Directly output the completion text. Do not include "Here is the completion:" or quotes.
-`;
+            const prompt = PromptRegistry.AUTOCOMPLETE_STREAM(context, text);
 
             const result = await completionModel.generateContentStream(prompt);
 
@@ -241,6 +201,137 @@ Directly output the completion text. Do not include "Here is the completion:" or
             onChunk(chunk);
         }
     }
+
+    /**
+     * Generate or Edit a Draw.io diagram
+     * @param {string} userPrompt - The user's request
+     * @param {string} currentXML - The current XML of the diagram (empty if new)
+     * @returns {Promise<{tool: string, content: any}>} - The tool to call and its content
+     */
+    async generateDiagram(userPrompt, currentXML = '') {
+        if (this.isMock) {
+            console.log("[Mock AI] Generating diagram for:", userPrompt);
+            return {
+                tool: 'display_diagram',
+                content: {
+                    xml: '<root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="Mock Diagram" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1"><mxGeometry x="120" y="120" width="120" height="60" as="geometry"/></mxCell></root>'
+                }
+            };
+        }
+
+        try {
+            // Define tools for Gemini
+            const tools = [
+                {
+                    functionDeclarations: [
+                        {
+                            name: "display_diagram",
+                            description: "Display a NEW diagram on draw.io. Use this when creating a diagram from scratch or when major structural changes are needed.",
+                            parameters: {
+                                type: "OBJECT",
+                                properties: {
+                                    xml: {
+                                        type: "STRING",
+                                        description: "XML string to be displayed on draw.io. Must include <root> and nodes."
+                                    }
+                                },
+                                required: ["xml"]
+                            }
+                        },
+                        {
+                            name: "edit_diagram",
+                            description: "Edit specific parts of the EXISTING diagram. Use this when making small targeted changes.",
+                            parameters: {
+                                type: "OBJECT",
+                                properties: {
+                                    edits: {
+                                        type: "ARRAY",
+                                        description: "Array of search/replace pairs",
+                                        items: {
+                                            type: "OBJECT",
+                                            properties: {
+                                                search: { type: "STRING", description: "Exact lines to search for" },
+                                                replace: { type: "STRING", description: "Replacement lines" }
+                                            },
+                                            required: ["search", "replace"]
+                                        }
+                                    }
+                                },
+                                required: ["edits"]
+                            }
+                        }
+                    ]
+                }
+            ];
+
+            // Get a model instance with tools
+            const model = this.genAI.getGenerativeModel({
+                model: this.modelName,
+                tools: tools
+            });
+
+
+
+            const systemPrompt = PromptRegistry.DRAWIO_SYSTEM(currentXML);
+
+            const chat = model.startChat({
+                history: [
+                    {
+                        role: "user",
+                        parts: [{ text: systemPrompt }]
+                    },
+                    {
+                        role: "model",
+                        parts: [{ text: "Understood. I am ready to generate or edit diagrams." }]
+                    }
+                ]
+            });
+
+            const result = await chat.sendMessage(userPrompt);
+            const response = await result.response;
+            const functionCalls = response.functionCalls();
+
+            if (functionCalls && functionCalls.length > 0) {
+                const call = functionCalls[0];
+                return {
+                    tool: call.name,
+                    content: call.args
+                };
+            } else {
+                // If no function call, check if it returned XML in text
+                const text = response.text();
+
+                // Fallback: Try to extract XML from text if it looks like a diagram
+                const xmlMatch = text.match(/```xml\s*([\s\S]*?)\s*```/) || text.match(/<mxfile[\s\S]*?<\/mxfile>/) || text.match(/<root>[\s\S]*?<\/root>/);
+
+                if (xmlMatch) {
+                    let xmlContent = xmlMatch[1] || xmlMatch[0];
+                    // Clean up potential markdown code block markers if regex matched the whole block without capturing group
+                    xmlContent = xmlContent.replace(/^```xml\s*/, '').replace(/\s*```$/, '');
+
+                    console.log("Fallback: Detected XML in text response, converting to tool call.");
+
+                    // Determine if it's a full diagram or partial edit based on content
+                    if (xmlContent.includes('<mxfile') || xmlContent.includes('<root>')) {
+                        return {
+                            tool: 'display_diagram',
+                            content: { xml: xmlContent }
+                        };
+                    }
+                }
+
+                return {
+                    tool: 'message',
+                    content: text
+                };
+            }
+
+        } catch (error) {
+            console.error("Generate Diagram Error:", error);
+            throw error;
+        }
+    }
+
 }
 
 export const aiService = new AIService();

@@ -117,7 +117,7 @@ const MagicCommand = ({ isOpen, onClose, onInsert, editor }) => {
                 const lowerInput = commandText.toLowerCase();
                 if (hasSelection) {
                     // If selection exists, treat input as instruction for selection
-                    prompt = `Context: "${selectionText}"\n\nInstruction: ${commandText}`;
+                    prompt = PromptRegistry.CONTEXTUAL_INSTRUCTION(selectionText, commandText);
                 } else {
                     // No selection, generation mode
                     if (lowerInput.includes('outline') || lowerInput.includes('大纲')) {

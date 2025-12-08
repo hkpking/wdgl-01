@@ -20,22 +20,38 @@ export const importWordDoc = async (file) => {
                         "p[style-name='List Paragraph'] => ul > li:fresh"
                     ]
                 };
-                const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer }, options);
+
+                // Fix for Vite/Rollup CommonJS interop
+                const convertToHtml = mammoth.convertToHtml || (mammoth.default ? mammoth.default.convertToHtml : null);
+
+                if (!convertToHtml) {
+                    throw new Error('Mammoth library not loaded correctly');
+                }
+
+                console.log('[Import] Starting conversion for:', file.name);
+                const result = await convertToHtml({ arrayBuffer: arrayBuffer }, options);
 
                 if (result.messages.length > 0) {
-                    console.log("Mammoth messages:", result.messages);
+                    console.log("[Import] Mammoth messages:", result.messages);
                 }
 
                 // Post-process HTML to fix Tiptap schema errors
-                // Tiptap requires table cells to have content.
                 let html = result.value;
+
+                if (!html || !html.trim()) {
+                    console.warn('[Import] Warning: Converted HTML is empty');
+                }
+
+                // Tiptap requires table cells to have content.
                 html = html.replace(/<td>\s*<\/td>/g, '<td><p>&nbsp;</p></td>');
 
                 // Ensure images have max-width to prevent overflow and allow resizing defaults
                 html = html.replace(/<img /g, '<img style="max-width: 100%; height: auto;" ');
 
+                console.log('[Import] Conversion successful, length:', html.length);
                 resolve(html); // The generated HTML
             } catch (error) {
+                console.error('[Import] Error:', error);
                 reject(error);
             }
         };

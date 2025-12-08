@@ -1,92 +1,196 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import { DrawIoEmbed } from 'react-drawio';
+import { X, Save, Maximize2, Minimize2 } from 'lucide-react';
+import DrawIOChat from './DrawIO/DrawIOChat';
+import { extractDiagramXML, replaceXMLParts, replaceNodes } from '../utils/drawio-utils';
 
 export default function DrawioEditor({ isOpen, onClose, initialXml, onSave }) {
-    const iframeRef = useRef(null);
-    const [isLoaded, setIsLoaded] = useState(false);
-    const [tempXml, setTempXml] = useState(null);
+    const drawioRef = useRef(null);
+    const [currentXML, setCurrentXML] = useState(initialXml || '');
+    const [isChatVisible, setIsChatVisible] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
 
+    // Reset state when opening
     useEffect(() => {
-        if (!isOpen) return;
+        if (isOpen) {
+            setCurrentXML(initialXml || '');
+            setIsChatVisible(true);
+        }
+    }, [isOpen, initialXml]);
 
-        const handleMessage = (e) => {
-            if (!e.data || typeof e.data !== 'string') return;
+    // Promise resolver for export
+    const exportResolverRef = useRef(null);
 
-            let msg;
-            try {
-                msg = JSON.parse(e.data);
-            } catch (err) {
+    const handleDiagramExport = (data) => {
+        try {
+            // If we are just tracking changes or AI needs it
+            if (data.event === 'export') {
+                const extractedXML = extractDiagramXML(data.data);
+                setCurrentXML(extractedXML);
+
+                if (exportResolverRef.current) {
+                    exportResolverRef.current({ xml: extractedXML, data: data.data }); // data.data is the SVG/XMLSVG
+                    exportResolverRef.current = null;
+                }
+            }
+        } catch (error) {
+            console.error("Error extracting XML:", error);
+        }
+    };
+
+    const getLatestData = () => {
+        return new Promise((resolve, reject) => {
+            if (!drawioRef.current) {
+                reject("Draw.io editor not initialized");
                 return;
             }
 
-            if (msg.event === 'configure') {
-                // Configuration if needed
-                iframeRef.current?.contentWindow.postMessage(JSON.stringify({
-                    action: 'configure',
-                    config: {
-                        compressXml: false // Keep it simple for now
-                    }
-                }), '*');
-            } else if (msg.event === 'init') {
-                setIsLoaded(true);
-                // Send load message
-                iframeRef.current?.contentWindow.postMessage(JSON.stringify({
-                    action: 'load',
-                    xml: initialXml || '',
-                    autosave: 0, // We handle save manually via the save button
-                }), '*');
-            } else if (msg.event === 'save') {
-                // User clicked save in Draw.io
-                // 1. Capture XML
-                const xml = msg.xml;
-                setTempXml(xml);
+            exportResolverRef.current = resolve;
 
-                // 2. Request Export for Preview (SVG)
-                iframeRef.current?.contentWindow.postMessage(JSON.stringify({
-                    action: 'export',
-                    format: 'svg',
-                    spin: 'Generating preview...',
-                    xml: xml,
-                }), '*');
-            } else if (msg.event === 'export') {
-                // 3. Receive Export Data
-                if (tempXml) {
-                    // We have both XML and the exported image (SVG data URI)
-                    onSave(tempXml, msg.data);
-                    onClose();
-                } else {
-                    // Fallback if tempXml wasn't set (shouldn't happen in this flow)
-                    // But if we just requested export without save, we might handle it here
-                    // For now, assume this flows from 'save'
-                    // If msg.data is the SVG, we can try to extract XML from it if embedded, but better to use the one from 'save'
+            // Trigger export
+            drawioRef.current.exportDiagram({
+                format: 'xmlsvg',
+            });
+
+            // Timeout safety
+            setTimeout(() => {
+                if (exportResolverRef.current) {
+                    exportResolverRef.current = null;
+                    reject("Export timed out");
                 }
-            } else if (msg.event === 'exit') {
-                onClose();
-            }
-        };
+            }, 5000);
+        });
+    };
 
-        window.addEventListener('message', handleMessage);
-        return () => window.removeEventListener('message', handleMessage);
-    }, [isOpen, initialXml, onSave, onClose, tempXml]);
+    const EMPTY_DIAGRAM = '<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
+
+    const handleApplyXML = (xml) => {
+        if (drawioRef.current) {
+            let fullXML = xml;
+            // If the XML is just the root nodes (from AI), wrap it in the standard structure
+            if (xml.trim().startsWith('<root>')) {
+                try {
+                    const base = currentXML || EMPTY_DIAGRAM;
+                    fullXML = replaceNodes(base, xml);
+                } catch (error) {
+                    console.error("Failed to merge nodes:", error);
+                    // Fallback to empty diagram with new nodes
+                    try {
+                        fullXML = replaceNodes(EMPTY_DIAGRAM, xml);
+                    } catch (e) {
+                        console.error("Critical error constructing XML:", e);
+                    }
+                }
+            }
+
+            console.log("Loading XML to Draw.io:", fullXML.substring(0, 100) + "...");
+            drawioRef.current.load({ xml: fullXML });
+            setCurrentXML(fullXML);
+        }
+    };
+
+    const handleApplyEdits = async (edits) => {
+        try {
+            const { xml } = await getLatestData();
+            const newXML = replaceXMLParts(xml, edits);
+            handleApplyXML(newXML);
+        } catch (error) {
+            console.error("Failed to apply edits:", error);
+            alert("应用修改失败，请重试。");
+        }
+    };
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            const { xml, data } = await getLatestData();
+            // data is the XMLSVG string (data:image/svg+xml;base64,...)
+            // We can use this as the preview URL directly
+            onSave(xml, data);
+            onClose();
+        } catch (error) {
+            console.error("Save failed:", error);
+            alert("保存失败，请重试");
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
-            <div className="bg-white w-full h-full md:w-[95vw] md:h-[95vh] relative flex flex-col rounded-lg overflow-hidden shadow-2xl">
-                <iframe
-                    ref={iframeRef}
-                    src="https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&modified=unsavedChanges&proto=json&configure=1&libraries=1&clibs=general;flowchart;basic;arrows;bpmn"
-                    className="w-full h-full border-0"
-                    title="Draw.io Editor"
-                />
-                {!isLoaded && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                            <p className="text-gray-500 font-medium">正在加载 Draw.io 编辑器...</p>
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white w-full h-full max-w-[95vw] max-h-[95vh] rounded-lg shadow-2xl flex flex-col overflow-hidden relative animate-in fade-in zoom-in-95 duration-200">
+
+                {/* Header */}
+                <div className="h-12 border-b border-gray-200 flex justify-between items-center px-4 bg-gray-50 flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-700">流程图编辑器</span>
+                        <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">AI 驱动</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm font-medium transition-colors"
+                        >
+                            {isSaving ? '保存中...' : (
+                                <>
+                                    <Save size={16} /> 保存并关闭
+                                </>
+                            )}
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="p-1.5 hover:bg-gray-200 rounded text-gray-500 transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Main Content */}
+                <div className="flex-1 flex overflow-hidden relative">
+                    {/* Chat Sidebar */}
+                    <div
+                        className={`transition-all duration-300 ease-in-out ${isChatVisible ? 'w-80 border-r' : 'w-0'
+                            } border-gray-200 bg-white relative flex-shrink-0`}
+                    >
+                        <div className="w-80 h-full absolute left-0 top-0">
+                            <DrawIOChat
+                                currentXML={currentXML}
+                                onApplyXML={handleApplyXML}
+                                onApplyEdits={handleApplyEdits}
+                            />
                         </div>
                     </div>
-                )}
+
+                    {/* Toggle Chat Button */}
+                    <button
+                        onClick={() => setIsChatVisible(!isChatVisible)}
+                        className="absolute bottom-4 left-4 z-10 p-2 bg-white rounded-full shadow-lg border border-gray-200 hover:bg-gray-50 text-gray-600 transition-transform hover:scale-105"
+                        style={{ left: isChatVisible ? '21rem' : '1rem' }}
+                        title={isChatVisible ? "隐藏 AI 助手" : "显示 AI 助手"}
+                    >
+                        {isChatVisible ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                    </button>
+
+                    {/* Editor Area */}
+                    <div className="flex-1 h-full bg-gray-100 relative">
+                        <DrawIoEmbed
+                            ref={drawioRef}
+                            onExport={handleDiagramExport}
+                            urlParameters={{
+                                spin: true,
+                                libraries: false,
+                                saveAndExit: false,
+                                noExitBtn: true,
+                                ui: 'atlas', // Use atlas theme for better embedded experience
+                            }}
+                            xml={initialXml} // Load initial XML
+                        />
+                    </div>
+                </div>
             </div>
         </div>
     );
