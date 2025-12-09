@@ -1,36 +1,79 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from 'openai';
 import { PromptRegistry } from './PromptRegistry';
 
 /**
- * AI Service for handling interactions with LLMs (Gemini).
- * Supports both real API calls and a Mock mode for development without keys.
+ * AI Service for handling interactions with multiple LLM providers.
+ * Supports: Google Gemini, DeepSeek (OpenAI-compatible), and Mock mode.
  */
+
+// Supported AI providers
+export const AI_PROVIDERS = {
+    GEMINI: 'gemini',
+    DEEPSEEK: 'deepseek',
+    // Future: OPENAI: 'openai', ANTHROPIC: 'anthropic', etc.
+};
+
 class AIService {
     constructor() {
+        this.provider = localStorage.getItem('wdgl_ai_provider') || AI_PROVIDERS.GEMINI;
         this.apiKey = localStorage.getItem('wdgl_ai_key') || '';
-        this.modelName = localStorage.getItem('wdgl_ai_model') || 'gemini-1.5-flash';
-        this.genAI = null;
+        this.modelName = localStorage.getItem('wdgl_ai_model') || this._getDefaultModel();
+
+        // Provider-specific clients
+        this.genAI = null; // Google Gemini
+        this.openaiClient = null; // DeepSeek (OpenAI-compatible)
         this.model = null;
+
         this.isMock = !this.apiKey;
 
         if (this.apiKey) {
-            this.initClient(this.apiKey, this.modelName);
+            this.initClient(this.apiKey, this.modelName, this.provider);
+        }
+    }
+
+    _getDefaultModel() {
+        switch (this.provider) {
+            case AI_PROVIDERS.DEEPSEEK:
+                return 'deepseek-chat';
+            case AI_PROVIDERS.GEMINI:
+            default:
+                return 'gemini-1.5-flash';
         }
     }
 
     /**
-     * Initialize the Gemini client
+     * Initialize the AI client based on provider
      * @param {string} apiKey 
+     * @param {string} modelName 
+     * @param {string} provider 
      */
-    initClient(apiKey, modelName = 'gemini-1.5-flash') {
+    initClient(apiKey, modelName, provider = AI_PROVIDERS.GEMINI) {
         this.apiKey = apiKey;
         this.modelName = modelName;
+        this.provider = provider;
         this.isMock = false;
+
         try {
-            this.genAI = new GoogleGenerativeAI(apiKey);
-            this.model = this.genAI.getGenerativeModel({ model: modelName });
+            if (provider === AI_PROVIDERS.DEEPSEEK) {
+                // DeepSeek uses OpenAI-compatible API
+                this.openaiClient = new OpenAI({
+                    baseURL: 'https://api.deepseek.com/v1',
+                    apiKey: apiKey,
+                    dangerouslyAllowBrowser: true // Required for browser usage
+                });
+                this.genAI = null;
+                this.model = null;
+            } else {
+                // Default: Google Gemini
+                this.genAI = new GoogleGenerativeAI(apiKey);
+                this.model = this.genAI.getGenerativeModel({ model: modelName });
+                this.openaiClient = null;
+            }
+
             localStorage.setItem('wdgl_ai_key', apiKey);
             localStorage.setItem('wdgl_ai_model', modelName);
+            localStorage.setItem('wdgl_ai_provider', provider);
         } catch (error) {
             console.error("Failed to initialize AI client:", error);
             this.isMock = true;
@@ -38,30 +81,51 @@ class AIService {
     }
 
     /**
-     * Fetch available models from Google API
+     * Get available models for the current provider
+     * @returns {Array} List of models
+     */
+    getAvailableModels() {
+        if (this.provider === AI_PROVIDERS.DEEPSEEK) {
+            return [
+                { id: 'deepseek-chat', name: 'DeepSeek Chat (推荐)' },
+                { id: 'deepseek-coder', name: 'DeepSeek Coder' },
+                { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner' }
+            ];
+        } else {
+            // Gemini models
+            return [
+                { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (默认)' },
+                { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+                { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (预览)' }
+            ];
+        }
+    }
+
+    /**
+     * Fetch available models from API (async version)
      * @param {string} apiKey 
      * @returns {Promise<Array>} List of models
      */
     async fetchAvailableModels(apiKey) {
-        if (!apiKey) return [];
-        try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-            if (!response.ok) throw new Error('Failed to fetch models');
-            const data = await response.json();
-            return data.models
-                .filter(m => m.supportedGenerationMethods.includes('generateContent'))
-                .map(m => ({
-                    id: m.name.replace('models/', ''),
-                    name: m.displayName || m.name
-                }));
-        } catch (error) {
-            console.error("Error fetching models:", error);
-            return [
-                { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Default)' },
-                { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
-                { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (Preview)' }
-            ];
+        if (!apiKey) return this.getAvailableModels();
+
+        if (this.provider === AI_PROVIDERS.GEMINI) {
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                if (!response.ok) throw new Error('Failed to fetch models');
+                const data = await response.json();
+                return data.models
+                    .filter(m => m.supportedGenerationMethods.includes('generateContent'))
+                    .map(m => ({
+                        id: m.name.replace('models/', ''),
+                        name: m.displayName || m.name
+                    }));
+            } catch (error) {
+                console.error("Error fetching models:", error);
+            }
         }
+
+        return this.getAvailableModels();
     }
 
     /**
@@ -76,19 +140,21 @@ class AIService {
         }
 
         try {
-            // Use the currently selected model (user preference)
-            const completionModel = this.model;
-
-
             const prompt = PromptRegistry.AUTOCOMPLETE(context, text);
 
-            const result = await completionModel.generateContent(prompt);
-            const response = await result.response;
-            const completion = response.text();
-
-            // Clean up: remove leading spaces if input ends with space, etc.
-            // But usually we want to preserve natural spacing.
-            return completion;
+            if (this.provider === AI_PROVIDERS.DEEPSEEK) {
+                const response = await this.openaiClient.chat.completions.create({
+                    model: this.modelName,
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 100
+                });
+                return response.choices[0]?.message?.content || '';
+            } else {
+                // Gemini
+                const result = await this.model.generateContent(prompt);
+                const response = await result.response;
+                return response.text();
+            }
         } catch (error) {
             console.warn("Autocomplete failed:", error);
             return "";
@@ -97,10 +163,6 @@ class AIService {
 
     /**
      * Generate autocomplete suggestion (Streaming)
-     * @param {string} text Current text
-     * @param {string} context Surrounding context
-     * @param {function} onChunk Callback for each chunk
-     * @returns {Promise<void>}
      */
     async streamCompletion(text, context = '', onChunk) {
         if (this.isMock) {
@@ -108,21 +170,29 @@ class AIService {
         }
 
         try {
-            const completionModel = this.model;
-
             const prompt = PromptRegistry.AUTOCOMPLETE_STREAM(context, text);
 
-            const result = await completionModel.generateContentStream(prompt);
-
-            for await (const chunk of result.stream) {
-                const chunkText = chunk.text();
-                onChunk(chunkText);
+            if (this.provider === AI_PROVIDERS.DEEPSEEK) {
+                const stream = await this.openaiClient.chat.completions.create({
+                    model: this.modelName,
+                    messages: [{ role: 'user', content: prompt }],
+                    stream: true
+                });
+                for await (const chunk of stream) {
+                    const content = chunk.choices[0]?.delta?.content || '';
+                    if (content) onChunk(content);
+                }
+            } else {
+                // Gemini
+                const result = await this.model.generateContentStream(prompt);
+                for await (const chunk of result.stream) {
+                    onChunk(chunk.text());
+                }
             }
         } catch (error) {
             console.warn("Autocomplete stream failed:", error);
         }
     }
-
 
     /**
      * Switch to Mock mode explicitly or clear API key
@@ -131,6 +201,7 @@ class AIService {
         this.isMock = true;
         this.apiKey = '';
         this.genAI = null;
+        this.openaiClient = null;
         this.model = null;
         localStorage.removeItem('wdgl_ai_key');
     }
@@ -146,22 +217,26 @@ class AIService {
         }
 
         try {
-            if (!this.model) throw new Error("AI Model not initialized");
-            const result = await this.model.generateContent(prompt);
-            const response = await result.response;
-            return response.text();
+            if (this.provider === AI_PROVIDERS.DEEPSEEK) {
+                const response = await this.openaiClient.chat.completions.create({
+                    model: this.modelName,
+                    messages: [{ role: 'user', content: prompt }]
+                });
+                return response.choices[0]?.message?.content || '';
+            } else {
+                if (!this.model) throw new Error("AI Model not initialized");
+                const result = await this.model.generateContent(prompt);
+                const response = await result.response;
+                return response.text();
+            }
         } catch (error) {
             console.error("AI Generation Error:", error);
-            // Fallback to mock if error occurs (optional, maybe better to throw)
             throw error;
         }
     }
 
     /**
      * Stream text content
-     * @param {string} prompt 
-     * @param {function} onChunk - Callback for each chunk
-     * @returns {Promise<void>}
      */
     async streamText(prompt, onChunk) {
         if (this.isMock) {
@@ -169,12 +244,22 @@ class AIService {
         }
 
         try {
-            if (!this.model) throw new Error("AI Model not initialized");
-            const result = await this.model.generateContentStream(prompt);
-
-            for await (const chunk of result.stream) {
-                const chunkText = chunk.text();
-                onChunk(chunkText);
+            if (this.provider === AI_PROVIDERS.DEEPSEEK) {
+                const stream = await this.openaiClient.chat.completions.create({
+                    model: this.modelName,
+                    messages: [{ role: 'user', content: prompt }],
+                    stream: true
+                });
+                for await (const chunk of stream) {
+                    const content = chunk.choices[0]?.delta?.content || '';
+                    if (content) onChunk(content);
+                }
+            } else {
+                if (!this.model) throw new Error("AI Model not initialized");
+                const result = await this.model.generateContentStream(prompt);
+                for await (const chunk of result.stream) {
+                    onChunk(chunk.text());
+                }
             }
         } catch (error) {
             console.error("AI Stream Error:", error);
@@ -186,18 +271,17 @@ class AIService {
 
     async _mockGenerate(prompt) {
         console.log("[Mock AI] Generating for:", prompt);
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate latency
-        return `[MOCK RESPONSE]\nThis is a simulated response for the prompt:\n"${prompt.substring(0, 50)}..."\n\nIn a real scenario, Gemini would provide intelligent content here.`;
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        return `[MOCK RESPONSE]\nThis is a simulated response for the prompt:\n"${prompt.substring(0, 50)}..."\n\nIn a real scenario, the AI would provide intelligent content here.`;
     }
 
     async _mockStream(prompt, onChunk) {
         console.log("[Mock AI] Streaming for:", prompt);
-        const mockResponse = `[MOCK STREAM]\nThis is a simulated streaming response.\nIt mimics the behavior of an LLM generating text token by token.\n\nPrompt received: "${prompt.substring(0, 30)}..."`;
+        const mockResponse = `[MOCK STREAM]\nThis is a simulated streaming response.\nPrompt: "${prompt.substring(0, 30)}..."`;
 
-        const chunks = mockResponse.split(/(?=[ \n])/); // Split by words/spaces
-
+        const chunks = mockResponse.split(/(?=[ \n])/);
         for (const chunk of chunks) {
-            await new Promise(resolve => setTimeout(resolve, 100)); // Simulate token delay
+            await new Promise(resolve => setTimeout(resolve, 100));
             onChunk(chunk);
         }
     }
@@ -219,39 +303,45 @@ class AIService {
             };
         }
 
+        const systemPrompt = PromptRegistry.DRAWIO_SYSTEM(currentXML);
+
         try {
-            // Define tools for Gemini
-            const tools = [
-                {
-                    functionDeclarations: [
-                        {
+            if (this.provider === AI_PROVIDERS.DEEPSEEK) {
+                // DeepSeek: Use function calling with OpenAI format
+                const tools = [
+                    {
+                        type: "function",
+                        function: {
                             name: "display_diagram",
                             description: "Display a NEW diagram on draw.io. Use this when creating a diagram from scratch or when major structural changes are needed.",
                             parameters: {
-                                type: "OBJECT",
+                                type: "object",
                                 properties: {
                                     xml: {
-                                        type: "STRING",
+                                        type: "string",
                                         description: "XML string to be displayed on draw.io. Must include <root> and nodes."
                                     }
                                 },
                                 required: ["xml"]
                             }
-                        },
-                        {
+                        }
+                    },
+                    {
+                        type: "function",
+                        function: {
                             name: "edit_diagram",
                             description: "Edit specific parts of the EXISTING diagram. Use this when making small targeted changes.",
                             parameters: {
-                                type: "OBJECT",
+                                type: "object",
                                 properties: {
                                     edits: {
-                                        type: "ARRAY",
+                                        type: "array",
                                         description: "Array of search/replace pairs",
                                         items: {
-                                            type: "OBJECT",
+                                            type: "object",
                                             properties: {
-                                                search: { type: "STRING", description: "Exact lines to search for" },
-                                                replace: { type: "STRING", description: "Replacement lines" }
+                                                search: { type: "string", description: "Exact lines to search for" },
+                                                replace: { type: "string", description: "Replacement lines" }
                                             },
                                             required: ["search", "replace"]
                                         }
@@ -260,70 +350,126 @@ class AIService {
                                 required: ["edits"]
                             }
                         }
-                    ]
-                }
-            ];
-
-            // Get a model instance with tools
-            const model = this.genAI.getGenerativeModel({
-                model: this.modelName,
-                tools: tools
-            });
-
-
-
-            const systemPrompt = PromptRegistry.DRAWIO_SYSTEM(currentXML);
-
-            const chat = model.startChat({
-                history: [
-                    {
-                        role: "user",
-                        parts: [{ text: systemPrompt }]
-                    },
-                    {
-                        role: "model",
-                        parts: [{ text: "Understood. I am ready to generate or edit diagrams." }]
                     }
-                ]
-            });
+                ];
 
-            const result = await chat.sendMessage(userPrompt);
-            const response = await result.response;
-            const functionCalls = response.functionCalls();
+                const response = await this.openaiClient.chat.completions.create({
+                    model: this.modelName,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt }
+                    ],
+                    tools: tools,
+                    tool_choice: 'auto'
+                });
 
-            if (functionCalls && functionCalls.length > 0) {
-                const call = functionCalls[0];
-                return {
-                    tool: call.name,
-                    content: call.args
-                };
-            } else {
-                // If no function call, check if it returned XML in text
-                const text = response.text();
+                const message = response.choices[0]?.message;
 
-                // Fallback: Try to extract XML from text if it looks like a diagram
-                const xmlMatch = text.match(/```xml\s*([\s\S]*?)\s*```/) || text.match(/<mxfile[\s\S]*?<\/mxfile>/) || text.match(/<root>[\s\S]*?<\/root>/);
+                if (message?.tool_calls && message.tool_calls.length > 0) {
+                    const toolCall = message.tool_calls[0];
+                    const args = JSON.parse(toolCall.function.arguments);
+                    return {
+                        tool: toolCall.function.name,
+                        content: args
+                    };
+                } else if (message?.content) {
+                    // Fallback: try to extract XML from text
+                    const text = message.content;
+                    const xmlMatch = text.match(/```xml\s*([\s\S]*?)\s*```/) || text.match(/<mxfile[\s\S]*?<\/mxfile>/) || text.match(/<root>[\s\S]*?<\/root>/);
 
-                if (xmlMatch) {
-                    let xmlContent = xmlMatch[1] || xmlMatch[0];
-                    // Clean up potential markdown code block markers if regex matched the whole block without capturing group
-                    xmlContent = xmlContent.replace(/^```xml\s*/, '').replace(/\s*```$/, '');
-
-                    console.log("Fallback: Detected XML in text response, converting to tool call.");
-
-                    // Determine if it's a full diagram or partial edit based on content
-                    if (xmlContent.includes('<mxfile') || xmlContent.includes('<root>')) {
+                    if (xmlMatch) {
+                        let xmlContent = xmlMatch[1] || xmlMatch[0];
+                        xmlContent = xmlContent.replace(/^```xml\s*/, '').replace(/\s*```$/, '');
                         return {
                             tool: 'display_diagram',
                             content: { xml: xmlContent }
                         };
                     }
+
+                    return { tool: 'message', content: text };
                 }
 
-                return {
-                    tool: 'message',
-                    content: text
-                };
+                return { tool: 'message', content: '无法生成图表，请重试。' };
+
+            } else {
+                // Gemini: Use Gemini's function calling
+                const tools = [
+                    {
+                        functionDeclarations: [
+                            {
+                                name: "display_diagram",
+                                description: "Display a NEW diagram on draw.io. Use this when creating a diagram from scratch or when major structural changes are needed.",
+                                parameters: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        xml: {
+                                            type: "STRING",
+                                            description: "XML string to be displayed on draw.io. Must include <root> and nodes."
+                                        }
+                                    },
+                                    required: ["xml"]
+                                }
+                            },
+                            {
+                                name: "edit_diagram",
+                                description: "Edit specific parts of the EXISTING diagram. Use this when making small targeted changes.",
+                                parameters: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        edits: {
+                                            type: "ARRAY",
+                                            description: "Array of search/replace pairs",
+                                            items: {
+                                                type: "OBJECT",
+                                                properties: {
+                                                    search: { type: "STRING", description: "Exact lines to search for" },
+                                                    replace: { type: "STRING", description: "Replacement lines" }
+                                                },
+                                                required: ["search", "replace"]
+                                            }
+                                        }
+                                    },
+                                    required: ["edits"]
+                                }
+                            }
+                        ]
+                    }
+                ];
+
+                const model = this.genAI.getGenerativeModel({
+                    model: this.modelName,
+                    tools: tools
+                });
+
+                const chat = model.startChat({
+                    history: [
+                        { role: "user", parts: [{ text: systemPrompt }] },
+                        { role: "model", parts: [{ text: "Understood. I am ready to generate or edit diagrams." }] }
+                    ]
+                });
+
+                const result = await chat.sendMessage(userPrompt);
+                const response = await result.response;
+                const functionCalls = response.functionCalls();
+
+                if (functionCalls && functionCalls.length > 0) {
+                    const call = functionCalls[0];
+                    return { tool: call.name, content: call.args };
+                } else {
+                    const text = response.text();
+                    const xmlMatch = text.match(/```xml\s*([\s\S]*?)\s*```/) || text.match(/<mxfile[\s\S]*?<\/mxfile>/) || text.match(/<root>[\s\S]*?<\/root>/);
+
+                    if (xmlMatch) {
+                        let xmlContent = xmlMatch[1] || xmlMatch[0];
+                        xmlContent = xmlContent.replace(/^```xml\s*/, '').replace(/\s*```$/, '');
+
+                        if (xmlContent.includes('<mxfile') || xmlContent.includes('<root>')) {
+                            return { tool: 'display_diagram', content: { xml: xmlContent } };
+                        }
+                    }
+
+                    return { tool: 'message', content: text };
+                }
             }
 
         } catch (error) {
@@ -331,7 +477,6 @@ class AIService {
             throw error;
         }
     }
-
 }
 
 export const aiService = new AIService();

@@ -78,6 +78,40 @@ export function convertToLegalXml(xmlString) {
     return result;
 }
 
+/**
+ * Clean a complete mxfile XML by extracting valid mxCell elements and rebuilding the structure.
+ * This handles cases where AI generates mxfile with incomplete mxGeometry elements.
+ * @param {string} xmlString The complete mxfile XML string
+ * @returns {string} A cleaned mxfile XML string with only valid mxCell elements
+ */
+export function cleanMxfileXml(xmlString) {
+    try {
+        // 使用 convertToLegalXml 提取有效的 mxCell 节点
+        const cleanedRoot = convertToLegalXml(xmlString);
+
+        // 如果清理后只有空的 root，返回一个基本的空图表
+        if (cleanedRoot === '<root>\n</root>' || !cleanedRoot.includes('<mxCell')) {
+            return '<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
+        }
+
+        // 确保有基础的 cell 0 和 cell 1
+        let rootContent = cleanedRoot;
+        if (!rootContent.includes('id="0"')) {
+            rootContent = rootContent.replace('<root>', '<root>\n    <mxCell id="0"/>');
+        }
+        if (!rootContent.includes('id="1"')) {
+            rootContent = rootContent.replace('<mxCell id="0"/>', '<mxCell id="0"/>\n    <mxCell id="1" parent="0"/>');
+        }
+
+        // 构建完整的 mxfile 结构
+        return `<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel>${rootContent}</mxGraphModel></diagram></mxfile>`;
+    } catch (error) {
+        console.error("Error cleaning mxfile XML:", error);
+        // 返回空图表作为回退
+        return '<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
+    }
+}
+
 
 /**
  * Replace nodes in a Draw.io XML diagram

@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('AI Magic Command Flow', async ({ page }) => {
     page.on('console', msg => console.log('PAGE LOG:', msg.text()));
     // 1. Go to Editor
-    await page.goto('http://localhost:5173/editor/ai-test-doc');
+    await page.goto('http://localhost:3000/editor/ai-test-doc');
 
     // Wait for editor to load (look for the main editor area)
     await page.waitForSelector('.bg-slate-100\\/50', { timeout: 10000 });

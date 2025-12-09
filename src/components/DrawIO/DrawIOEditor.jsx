@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { DrawIoEmbed } from 'react-drawio';
 import DrawIOChat from './DrawIOChat';
-import { extractDiagramXML, replaceXMLParts, replaceNodes } from '../../utils/drawio-utils';
+import { extractDiagramXML, replaceXMLParts, replaceNodes, convertToLegalXml } from '../../utils/drawio-utils';
 
 export default function DrawIOEditor() {
     const drawioRef = useRef(null);
@@ -51,30 +51,52 @@ export default function DrawIOEditor() {
 
     const EMPTY_DIAGRAM = '<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
 
+    /**
+     * 处理 AI 生成的 XML 并加载到 Draw.io
+     * 对标 aidiwo 的处理逻辑：统一使用 convertToLegalXml + replaceNodes
+     */
     const handleApplyXML = (xml) => {
-        if (drawioRef.current) {
-            let fullXML = xml;
-            // If the XML is just the root nodes (from AI), wrap it in the standard structure
-            if (xml.trim().startsWith('<root>')) {
-                try {
-                    const base = currentXML || EMPTY_DIAGRAM;
-                    fullXML = replaceNodes(base, xml);
-                } catch (error) {
-                    console.error("Failed to merge nodes:", error);
-                    // Fallback to empty diagram with new nodes
-                    try {
-                        fullXML = replaceNodes(EMPTY_DIAGRAM, xml);
-                    } catch (e) {
-                        console.error("Critical error constructing XML:", e);
-                    }
-                }
-            }
+        if (!drawioRef.current) {
+            console.error("Draw.io editor not initialized");
+            return;
+        }
 
-            console.log("Loading XML to Draw.io:", fullXML.substring(0, 100) + "...");
-            drawioRef.current.load({ xml: fullXML });
-            setCurrentXML(fullXML);
+        if (!xml || typeof xml !== 'string') {
+            console.error("Invalid XML provided:", xml);
+            return;
+        }
+
+        try {
+            const inputXml = xml.trim();
+            console.log("[handleApplyXML] Processing XML input...");
+
+            // 1. 使用 convertToLegalXml 清理 XML，提取有效的 mxCell 节点
+            // 这与 aidiwo 的 handleDisplayChart 函数完全一致
+            const cleanedXml = convertToLegalXml(inputXml);
+            console.log("[handleApplyXML] Cleaned XML:", cleanedXml.substring(0, 100) + "...");
+
+            // 2. 使用 replaceNodes 将清理后的节点合并到当前图表
+            const base = currentXML || EMPTY_DIAGRAM;
+            const mergedXml = replaceNodes(base, cleanedXml);
+            console.log("[handleApplyXML] Merged XML ready, loading to Draw.io");
+
+            // 3. 加载到 Draw.io
+            drawioRef.current.load({ xml: mergedXml });
+            setCurrentXML(mergedXml);
+
+        } catch (error) {
+            console.error("[handleApplyXML] Failed to apply XML:", error);
+            // 回退：加载空图表
+            try {
+                console.log("[handleApplyXML] Fallback: Loading empty diagram");
+                drawioRef.current.load({ xml: EMPTY_DIAGRAM });
+                setCurrentXML(EMPTY_DIAGRAM);
+            } catch (e) {
+                console.error("[handleApplyXML] Critical error:", e);
+            }
         }
     };
+
 
     const handleApplyEdits = async (edits) => {
         try {
@@ -123,11 +145,13 @@ export default function DrawIOEditor() {
                 <DrawIoEmbed
                     ref={drawioRef}
                     onExport={handleDiagramExport}
+                    baseUrl={import.meta.env.VITE_DRAWIO_URL || undefined}
                     urlParameters={{
                         spin: true,
                         libraries: false,
                         saveAndExit: false,
                         noExitBtn: true,
+                        lang: 'zh', // 设置界面语言为中文
                     }}
                 />
             </div>

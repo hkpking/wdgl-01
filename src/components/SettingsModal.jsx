@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings, Sparkles, Key, Monitor, Shield } from 'lucide-react';
-import { aiService } from '../services/ai/AIService';
+import { X, Settings, Sparkles, Key, Monitor, Shield, Zap } from 'lucide-react';
+import { aiService, AI_PROVIDERS } from '../services/ai/AIService';
 
 export default function SettingsModal({ isOpen, onClose }) {
     const [activeTab, setActiveTab] = useState('ai');
+    const [provider, setProvider] = useState(AI_PROVIDERS.GEMINI);
     const [apiKey, setApiKey] = useState('');
     const [selectedModel, setSelectedModel] = useState('gemini-1.5-flash');
     const [availableModels, setAvailableModels] = useState([]);
@@ -12,22 +13,36 @@ export default function SettingsModal({ isOpen, onClose }) {
     useEffect(() => {
         if (isOpen) {
             // Load current settings
+            const savedProvider = localStorage.getItem('wdgl_ai_provider') || AI_PROVIDERS.GEMINI;
             const currentKey = localStorage.getItem('wdgl_ai_key') || '';
+            const defaultModel = savedProvider === AI_PROVIDERS.DEEPSEEK ? 'deepseek-chat' : 'gemini-1.5-flash';
+
+            setProvider(savedProvider);
             setApiKey(currentKey);
-            setSelectedModel(localStorage.getItem('wdgl_ai_model') || 'gemini-1.5-flash');
+            setSelectedModel(localStorage.getItem('wdgl_ai_model') || defaultModel);
             setAutocompleteEnabled(localStorage.getItem('wdgl_ai_autocomplete_enabled') !== 'false');
 
-            if (currentKey) {
-                fetchModels(currentKey);
-            }
+            // Load models based on provider
+            updateModelsForProvider(savedProvider, currentKey);
         }
     }, [isOpen]);
 
-    const fetchModels = async (key) => {
-        const models = await aiService.fetchAvailableModels(key);
-        if (models.length > 0) {
-            setAvailableModels(models);
-        }
+    const updateModelsForProvider = (prov, key) => {
+        // Temporarily set provider in aiService to get correct models
+        const originalProvider = aiService.provider;
+        aiService.provider = prov;
+        const models = aiService.getAvailableModels();
+        aiService.provider = originalProvider;
+        setAvailableModels(models);
+    };
+
+    const handleProviderChange = (newProvider) => {
+        setProvider(newProvider);
+        // Update models list for new provider
+        updateModelsForProvider(newProvider, apiKey);
+        // Set default model for new provider
+        const defaultModel = newProvider === AI_PROVIDERS.DEEPSEEK ? 'deepseek-chat' : 'gemini-1.5-flash';
+        setSelectedModel(defaultModel);
     };
 
     const handleSaveAI = () => {
@@ -35,8 +50,9 @@ export default function SettingsModal({ isOpen, onClose }) {
         localStorage.setItem('wdgl_ai_autocomplete_enabled', autocompleteEnabled.toString());
 
         if (apiKey.trim()) {
-            aiService.initClient(apiKey.trim(), selectedModel);
-            alert(`AI 设置已保存！\n模型: ${selectedModel}\n自动补全: ${autocompleteEnabled ? '已启用' : '已禁用'}`);
+            aiService.initClient(apiKey.trim(), selectedModel, provider);
+            const providerName = provider === AI_PROVIDERS.DEEPSEEK ? 'DeepSeek' : 'Google Gemini';
+            alert(`AI 设置已保存！\n服务商: ${providerName}\n模型: ${selectedModel}\n自动补全: ${autocompleteEnabled ? '已启用' : '已禁用'}`);
         } else {
             aiService.enableMockMode();
             alert('API Key 已移除，切换回模拟模式。');
@@ -100,10 +116,41 @@ export default function SettingsModal({ isOpen, onClose }) {
                         {/* AI Settings */}
                         {activeTab === 'ai' && (
                             <div className="space-y-8 max-w-lg">
+                                {/* Provider Selection */}
+                                <div>
+                                    <h4 className="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
+                                        <Zap size={16} className="text-orange-500" />
+                                        AI 服务商
+                                    </h4>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => handleProviderChange(AI_PROVIDERS.GEMINI)}
+                                            className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all ${provider === AI_PROVIDERS.GEMINI
+                                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                                                }`}
+                                        >
+                                            <div className="font-medium">Google Gemini</div>
+                                            <div className="text-xs opacity-70 mt-1">免费额度，多模态支持</div>
+                                        </button>
+                                        <button
+                                            onClick={() => handleProviderChange(AI_PROVIDERS.DEEPSEEK)}
+                                            className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all ${provider === AI_PROVIDERS.DEEPSEEK
+                                                    ? 'border-green-500 bg-green-50 text-green-700'
+                                                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                                                }`}
+                                        >
+                                            <div className="font-medium">DeepSeek</div>
+                                            <div className="text-xs opacity-70 mt-1">高性价比，中文优化</div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* API Configuration */}
                                 <div>
                                     <h4 className="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
                                         <Key size={16} className="text-purple-500" />
-                                        Gemini API 配置
+                                        {provider === AI_PROVIDERS.DEEPSEEK ? 'DeepSeek' : 'Gemini'} API 配置
                                     </h4>
                                     <div className="space-y-4">
                                         <div>
@@ -112,7 +159,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                                                 type="password"
                                                 value={apiKey}
                                                 onChange={(e) => setApiKey(e.target.value)}
-                                                placeholder="输入您的 Gemini API Key..."
+                                                placeholder={`输入您的 ${provider === AI_PROVIDERS.DEEPSEEK ? 'DeepSeek' : 'Gemini'} API Key...`}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-shadow"
                                             />
                                             <p className="text-xs text-gray-500 mt-1">
@@ -127,18 +174,11 @@ export default function SettingsModal({ isOpen, onClose }) {
                                                 onChange={(e) => setSelectedModel(e.target.value)}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                                             >
-                                                {availableModels.length > 0 ? (
-                                                    availableModels.map(model => (
-                                                        <option key={model.id} value={model.id}>
-                                                            {model.name}
-                                                        </option>
-                                                    ))
-                                                ) : (
-                                                    <>
-                                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Default)</option>
-                                                        <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                                    </>
-                                                )}
+                                                {availableModels.map(model => (
+                                                    <option key={model.id} value={model.id}>
+                                                        {model.name}
+                                                    </option>
+                                                ))}
                                             </select>
                                         </div>
 
