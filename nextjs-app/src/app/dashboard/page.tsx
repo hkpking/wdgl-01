@@ -37,7 +37,7 @@ export default function Dashboard() {
         folderNameInput, setFolderNameInput,
         handleCreateFolder, handleRenameFolder, handleDeleteFolder,
         openCreateModal, openRenameModal, setFolderToDelete
-    } = folderManager;
+    } = folderManager as any;
 
     // Document State
     const [documents, setDocuments] = useState<any[]>([]);

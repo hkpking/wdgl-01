@@ -48,7 +48,7 @@ export default function EditorPage() {
     const [viewingVersion, setViewingVersion] = useState<any>(null);
 
     // Export hook
-    const { exportAsPDF } = useDocumentExport();
+    const { exportAsPDF } = useDocumentExport() as any;
 
     // Comment System State
     const [comments, setComments] = useState<any[]>([]);
