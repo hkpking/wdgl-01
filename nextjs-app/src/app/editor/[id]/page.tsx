@@ -238,7 +238,7 @@ export default function EditorPage() {
         onHistory: () => setIsVersionHistoryOpen(true),
         onWordCount: () => alert(`当前文档字数: ${wordCount} 字`),
         onClearFormat: () => { }
-    });
+    } as any);
 
     const handleBack = () => {
         if (isDirty) {
