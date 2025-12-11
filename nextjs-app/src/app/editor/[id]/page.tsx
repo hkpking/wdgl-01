@@ -405,6 +405,8 @@ export default function EditorPage() {
                         mode={editMode}
                         onChange={setEditMode}
                         currentUser={currentUser}
+                        onAcceptAll={() => { }}
+                        onRejectAll={() => { }}
                     />
                     <button
                         onClick={toggleAISidebar}
