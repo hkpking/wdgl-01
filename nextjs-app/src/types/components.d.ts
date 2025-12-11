@@ -30,7 +30,7 @@ declare module '@/components/DocHeader' {
         onBack: () => void;
         onShare: () => void;
         onOpenVersionHistory: () => void;
-        onImport?: (content: string, filename: string) => void;
+        onImport?: (file: File) => Promise<void>;
         onInsertBlock?: (type: string) => void;
         content?: string;
         editor?: any;
