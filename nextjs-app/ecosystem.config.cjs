@@ -3,7 +3,7 @@ module.exports = {
         {
             name: 'wdgl-nextjs',
             script: 'npm',
-            args: 'start',
+            args: 'start -- -p 3001',
             cwd: '/var/www/wdgl-01/nextjs-app',
             instances: 1,
             autorestart: true,
@@ -11,7 +11,7 @@ module.exports = {
             max_memory_restart: '1G',
             env: {
                 NODE_ENV: 'production',
-                PORT: 3000,
+                PORT: 3001,
             },
             error_file: '/var/www/wdgl-01/logs/nextjs-error.log',
             out_file: '/var/www/wdgl-01/logs/nextjs-out.log',
