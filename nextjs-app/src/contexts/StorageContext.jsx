@@ -1,9 +1,11 @@
+'use client';
+
 /**
  * StorageContext - 云端存储上下文
  * 使用 Supabase 作为后端存储服务
  */
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import * as supabaseService from '../services/api/documentService';
+import * as supabaseService from '@/lib/services/api/documentService';
 
 // Dev/Test 环境下允许绕过鉴权，避免编辑流程被路由守卫阻塞
 const BYPASS_AUTH = process.env.NEXT_PUBLIC_BYPASS_AUTH === 'true';

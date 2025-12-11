@@ -10,23 +10,15 @@ import FolderSelector from '@/components/FolderSelector';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { useFolderManager } from '@/hooks/useFolderManager';
 import { DOC_STATUS } from '@/lib/constants';
-import * as storage from '@/lib/storage';
+import { useStorage } from '@/contexts/StorageContext';
+import { Loader2 } from 'lucide-react';
 
 export default function Dashboard() {
     const router = useRouter();
 
-    // 模拟用户（暂时使用 mock 用户，后续集成认证）
-    const [currentUser, setCurrentUser] = useState<any>(null);
-
-    useEffect(() => {
-        // 获取当前用户
-        const user = storage.getCurrentUser();
-        if (!user) {
-            router.push('/login');
-            return;
-        }
-        setCurrentUser(user);
-    }, [router]);
+    // 使用 Supabase 认证
+    const storageContext = useStorage() as any;
+    const { currentUser, loading: authLoading, signOut, getAllDocuments, saveDocument, deleteDocument, moveDocument } = storageContext;
 
     // Managers
     const folderManager = useFolderManager(currentUser);
@@ -68,12 +60,12 @@ export default function Dashboard() {
     const loadDocuments = useCallback(async () => {
         if (!currentUser?.uid) return;
         try {
-            const docs = storage.getAllDocuments(currentUser.uid);
+            const docs = await getAllDocuments(currentUser.uid);
             setDocuments(docs || []);
         } catch (error) {
             console.error('加载文档失败:', error);
         }
-    }, [currentUser?.uid]);
+    }, [currentUser?.uid, getAllDocuments]);
 
     // Global Click Listener for Menu
     useEffect(() => {
@@ -100,7 +92,7 @@ export default function Dashboard() {
                 contentType: 'html',
                 folderId: selectedFolderId
             };
-            const savedDoc = storage.saveDocument(currentUser.uid, null, newDoc);
+            const savedDoc = await saveDocument(currentUser.uid, null, newDoc);
             if (savedDoc?.id) {
                 router.push(`/editor/${savedDoc.id}`);
             }
@@ -113,7 +105,7 @@ export default function Dashboard() {
     const handleDeleteDoc = async () => {
         if (!deleteDocId || !currentUser) return;
         try {
-            storage.deleteDocument(currentUser.uid, deleteDocId);
+            await deleteDocument(currentUser.uid, deleteDocId);
             setDeleteDocId(null);
             await loadDocuments();
         } catch (error) {
@@ -125,7 +117,7 @@ export default function Dashboard() {
     const handleMoveDoc = async (targetFolderId: string | null) => {
         if (!moveDocId) return;
         try {
-            storage.moveDocument(currentUser.uid, moveDocId, targetFolderId);
+            await moveDocument(currentUser.uid, moveDocId, targetFolderId);
             setMoveDocId(null);
             await loadDocuments();
         } catch (error) {
@@ -135,7 +127,7 @@ export default function Dashboard() {
 
     const handleLogout = async () => {
         if (window.confirm('确定要退出吗?')) {
-            storage.signOut();
+            await signOut();
             router.push('/login');
         }
     };
@@ -191,7 +183,7 @@ export default function Dashboard() {
             const doc = documents.find(d => d.id === docId);
             if (doc && doc.parentId !== folderId) {
                 try {
-                    storage.moveDocument(currentUser.uid, docId, folderId);
+                    await moveDocument(currentUser.uid, docId, folderId);
                     await loadDocuments();
                 } catch (error) {
                     console.error('Drag move failed:', error);
@@ -200,8 +192,19 @@ export default function Dashboard() {
         }
     };
 
+    // 认证加载中或未登录时显示加载状态
+    if (authLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            </div>
+        );
+    }
+
+    // 未登录时重定向到登录页
     if (!currentUser) {
-        return <div className="min-h-screen flex items-center justify-center">加载中...</div>;
+        router.push('/login');
+        return null;
     }
 
     return (

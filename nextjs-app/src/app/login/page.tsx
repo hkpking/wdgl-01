@@ -2,26 +2,27 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { authService } from '@/lib/auth';
+import { useStorage } from '@/contexts/StorageContext';
 import { Mail, Lock, User, LogIn, UserPlus, Loader2 } from 'lucide-react';
-import Link from 'next/link';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [displayName, setDisplayName] = useState('');
     const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const [isRegisterMode, setIsRegisterMode] = useState(false);
     const router = useRouter();
 
+    // 使用 Supabase 认证
+    const { signIn, signUp, currentUser, loading } = useStorage() as any;
+
     // 如果已登录，跳转到 Dashboard
     useEffect(() => {
-        const user = authService.getCurrentUser();
-        if (user) {
+        if (!loading && currentUser) {
             router.push('/dashboard');
         }
-    }, [router]);
+    }, [currentUser, loading, router]);
 
     async function handleLogin(e: React.FormEvent) {
         e.preventDefault();
@@ -32,15 +33,22 @@ export default function LoginPage() {
             return;
         }
 
-        setLoading(true);
+        setSubmitting(true);
         try {
-            await authService.signIn(email, password);
+            await signIn(email, password);
             router.push('/dashboard');
         } catch (err: any) {
             console.error('登录失败:', err);
-            setError(err.message || '登录失败');
+            // 处理 Supabase 错误信息
+            if (err.message?.includes('Invalid login credentials')) {
+                setError('邮箱或密码错误');
+            } else if (err.message?.includes('Email not confirmed')) {
+                setError('请先验证邮箱后再登录');
+            } else {
+                setError(err.message || '登录失败');
+            }
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
     }
 
@@ -58,17 +66,30 @@ export default function LoginPage() {
             return;
         }
 
-        setLoading(true);
+        setSubmitting(true);
         try {
-            await authService.signUp(email, password, displayName);
-            // 自动登录
-            router.push('/dashboard');
+            await signUp(email, password, displayName || email.split('@')[0]);
+            setError('✅ 注册成功！请检查邮箱完成验证后登录');
+            setIsRegisterMode(false);
         } catch (err: any) {
             console.error('注册失败:', err);
-            setError(err.message || '注册失败');
+            if (err.message?.includes('already registered')) {
+                setError('该邮箱已被注册');
+            } else {
+                setError(err.message || '注册失败');
+            }
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
+    }
+
+    // 显示加载状态
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            </div>
+        );
     }
 
     return (
@@ -87,7 +108,7 @@ export default function LoginPage() {
 
                 {/* Error Message */}
                 {error && (
-                    <div className={`mb-4 p-3 rounded-lg text-sm ${error.includes('成功')
+                    <div className={`mb-4 p-3 rounded-lg text-sm ${error.includes('✅')
                         ? 'bg-green-100 text-green-700'
                         : 'bg-red-100 text-red-700'
                         }`}>
@@ -155,13 +176,13 @@ export default function LoginPage() {
                     {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={submitting}
                         className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition flex items-center justify-center gap-2 ${isRegisterMode
                             ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
                             : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
                             } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                        {loading ? (
+                        {submitting ? (
                             <Loader2 className="w-5 h-5 animate-spin" />
                         ) : isRegisterMode ? (
                             <>
