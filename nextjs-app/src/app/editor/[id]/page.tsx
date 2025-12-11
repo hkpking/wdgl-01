@@ -62,7 +62,7 @@ export default function EditorPage() {
     const [editMode, setEditMode] = useState('editing');
 
     // Document Data Hook
-    const { document: loadedDoc, loading, error, reload } = useDocumentData(id, currentUser);
+    const { document: loadedDoc, loading, error, reload } = useDocumentData(id, currentUser) as any;
 
     // 追踪已处理的文档
     const processedDocRef = useRef<string | null>(null);
