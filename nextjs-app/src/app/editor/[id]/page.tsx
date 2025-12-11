@@ -389,7 +389,6 @@ export default function EditorPage() {
                     onBack={handleBack}
                     onShare={handleShare}
                     onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}
-                    onAddComment={handleAddComment}
                     onImport={handleImport}
                     onInsertBlock={handleInsertBlock}
                     content={content}
