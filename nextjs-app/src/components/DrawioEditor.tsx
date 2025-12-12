@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { DrawIoEmbed } from 'react-drawio';
-import { X, Save } from 'lucide-react';
+import { X, Save, Loader2 } from 'lucide-react';
 import ChatPanel from '@/components/chat-panel';
 import { DiagramProvider, useDiagram } from '@/contexts/diagram-context';
 
@@ -17,7 +17,7 @@ function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEdit
     const { drawioRef, handleDiagramExport, chartXML, latestSvg, loadDiagram } = useDiagram();
     const [isChatVisible, setIsChatVisible] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-
+    const [isLoading, setIsLoading] = useState(true);
     // 加载初始 XML
     useEffect(() => {
         if (isOpen && initialXml && drawioRef && 'current' in drawioRef && drawioRef.current) {
@@ -95,6 +95,7 @@ function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEdit
                             ref={drawioRef}
                             onExport={handleDiagramExport}
                             baseUrl={process.env.NEXT_PUBLIC_DRAWIO_URL || "https://bpm-auto.com/drawio"}
+                            onLoad={() => setIsLoading(false)}
                             urlParameters={{
                                 spin: true,
                                 libraries: false,
@@ -103,6 +104,12 @@ function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEdit
                                 lang: 'zh',
                             }}
                         />
+                        {isLoading && (
+                            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white">
+                                <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
+                                <p className="text-gray-500 font-medium">编辑器加载中...</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* AI 聊天面板 - 右侧 */}
