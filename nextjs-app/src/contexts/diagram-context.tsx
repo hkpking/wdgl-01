@@ -9,8 +9,8 @@ interface DiagramContextType {
     latestSvg: string;
     diagramHistory: { svg: string; xml: string }[];
     loadDiagram: (chart: string) => void;
-    handleExport: () => void;
-    resolverRef: React.Ref<((value: string) => void) | null>;
+    handleExport: () => Promise<{ xml: string; svg: string }>;
+    resolverRef: React.Ref<((value: { xml: string; svg: string }) => void) | null>;
     drawioRef: React.Ref<DrawIoEmbedRef | null>;
     handleDiagramExport: (data: any) => void;
     clearDiagram: () => void;
@@ -25,14 +25,19 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         { svg: string; xml: string }[]
     >([]);
     const drawioRef = useRef<DrawIoEmbedRef | null>(null);
-    const resolverRef = useRef<((value: string) => void) | null>(null);
+    const resolverRef = useRef<((value: { xml: string; svg: string }) => void) | null>(null);
 
     const handleExport = () => {
-        if (drawioRef.current) {
-            drawioRef.current.exportDiagram({
-                format: "xmlsvg",
-            });
-        }
+        return new Promise<{ xml: string; svg: string }>((resolve) => {
+            resolverRef.current = resolve;
+            if (drawioRef.current) {
+                drawioRef.current.exportDiagram({
+                    format: "xmlsvg",
+                });
+            } else {
+                console.error("DrawIO ref is null"); // Add error logging
+            }
+        });
     };
 
     const loadDiagram = (chart: string) => {
@@ -55,7 +60,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
             },
         ]);
         if (resolverRef.current) {
-            resolverRef.current(extractedXML);
+            resolverRef.current({ xml: extractedXML, svg: data.data });
             resolverRef.current = null;
         }
     };

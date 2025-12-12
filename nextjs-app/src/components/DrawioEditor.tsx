@@ -14,7 +14,7 @@ interface DrawioEditorModalProps {
 }
 
 function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEditorModalProps) {
-    const { drawioRef, handleDiagramExport, chartXML, latestSvg, loadDiagram } = useDiagram();
+    const { drawioRef, handleDiagramExport, loadDiagram, handleExport } = useDiagram();
     const [isChatVisible, setIsChatVisible] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -44,8 +44,9 @@ function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEdit
     const handleSave = async () => {
         setIsSaving(true);
         try {
-            // 使用当前的 chartXML 和 latestSvg
-            onSave(chartXML || '', latestSvg || '');
+            // 获取最新的 XML 和 SVG
+            const { xml, svg } = await handleExport();
+            onSave(xml, svg);
             onClose();
         } catch (error) {
             console.error("Save failed:", error);
@@ -102,6 +103,7 @@ function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEdit
                                 saveAndExit: false,
                                 noExitBtn: true,
                                 lang: 'zh',
+                                math: '0',
                             }}
                         />
                         {isLoading && (
