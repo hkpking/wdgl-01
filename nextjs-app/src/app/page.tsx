@@ -48,7 +48,7 @@ export default function Home() {
         <DrawIoEmbed
           ref={drawioRef}
           onExport={handleDiagramExport}
-          baseUrl={process.env.NEXT_PUBLIC_DRAWIO_URL || "https://embed.diagrams.net"}
+          baseUrl={process.env.NEXT_PUBLIC_DRAWIO_URL || "http://120.79.181.206:18080"}
           urlParameters={{
             spin: true,
             libraries: false,
