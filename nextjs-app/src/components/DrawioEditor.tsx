@@ -91,7 +91,7 @@ function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEdit
                 {/* Main Content - 左右布局，Draw.io 在左，AI 在右 */}
                 <div className="flex-1 flex overflow-hidden">
                     {/* Draw.io 编辑器 */}
-                    <div className={`${isChatVisible ? 'w-2/3' : 'w-full'} h-full relative transition-all duration-300 ease-in-out`}>
+                    <div className={`${isChatVisible ? 'w-2/3' : 'w-[calc(100%-3rem)]'} h-full relative transition-all duration-300 ease-in-out`}>
                         <DrawIoEmbed
                             ref={drawioRef}
                             onExport={handleDiagramExport}
@@ -104,7 +104,7 @@ function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEdit
                                 noExitBtn: true,
                                 lang: 'zh',
                                 math: '0',
-                            }}
+                            } as any}
                         />
                         {isLoading && (
                             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white">
@@ -115,7 +115,7 @@ function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEdit
                     </div>
 
                     {/* AI 聊天面板 - 右侧 */}
-                    <div className={`${isChatVisible ? 'w-1/3' : 'w-0'} h-full transition-all duration-300 ease-in-out overflow-hidden border-l border-gray-200`}>
+                    <div className={`${isChatVisible ? 'w-1/3' : 'w-12'} h-full transition-all duration-300 ease-in-out overflow-hidden border-l border-gray-200`}>
                         <ChatPanel
                             isVisible={isChatVisible}
                             onToggleVisibility={() => setIsChatVisible(!isChatVisible)}

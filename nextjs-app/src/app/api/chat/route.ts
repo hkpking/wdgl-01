@@ -1,5 +1,5 @@
 import { streamText, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import { getAIModel } from '@/lib/ai-providers';
+import { getAIModel, validateApiKey } from '@/lib/ai-providers';
 import { findCachedResponse } from '@/lib/cached-responses';
 import { z } from "zod";
 
@@ -33,10 +33,14 @@ export async function POST(req: Request) {
     const { messages, xml, provider = 'deepseek', model = 'deepseek-chat', apiKey } = await req.json();
 
     // Validate API key
-    if (!apiKey) {
+    // Check if API key is provided in request or environment
+    const hasEnvironmentKey = validateApiKey(provider as any);
+    const effectiveApiKey = apiKey || (hasEnvironmentKey ? undefined : null);
+
+    if (!effectiveApiKey && !hasEnvironmentKey) {
       return Response.json(
-        { error: '请输入 API Key' },
-        { status: 400 }
+        { error: 'API Configuration Missing: Please provide an API key or configure server environment.' },
+        { status: 401 }
       );
     }
 
@@ -210,7 +214,8 @@ ${lastMessageText}
     }
 
     // Get AI model from client-provided configuration
-    const aiModel = getAIModel(provider, model, apiKey);
+    // Get AI model from client-provided configuration or environment
+    const aiModel = getAIModel(provider, model, effectiveApiKey);
 
     // System message with cache point for Bedrock (requires 1024+ tokens)
     const systemMessageWithCache = {

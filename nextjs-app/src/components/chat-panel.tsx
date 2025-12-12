@@ -121,12 +121,7 @@ export default function ChatPanel({ isVisible, onToggleVisibility }: ChatPanelPr
 
     const onFetchChart = () => {
         return Promise.race([
-            new Promise<string>((resolve) => {
-                if (resolverRef && "current" in resolverRef) {
-                    resolverRef.current = resolve;
-                }
-                onExport();
-            }),
+            onExport().then((data) => data.xml),
             new Promise<string>((_, reject) =>
                 setTimeout(() => reject(new Error("Chart export timed out after 10 seconds")), 10000)
             )
