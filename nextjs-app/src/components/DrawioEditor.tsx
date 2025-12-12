@@ -94,7 +94,7 @@ function DrawioEditorContent({ isOpen, onClose, initialXml, onSave }: DrawioEdit
                         <DrawIoEmbed
                             ref={drawioRef}
                             onExport={handleDiagramExport}
-                            baseUrl={process.env.NEXT_PUBLIC_DRAWIO_URL || "http://120.79.181.206:18080"}
+                            baseUrl={process.env.NEXT_PUBLIC_DRAWIO_URL || "https://embed.diagrams.net"}
                             urlParameters={{
                                 spin: true,
                                 libraries: false,
