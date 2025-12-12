@@ -11,13 +11,15 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import { useFolderManager } from '@/hooks/useFolderManager';
 import { DOC_STATUS } from '@/lib/constants';
 import { useStorage } from '@/contexts/StorageContext';
+import type { Document, DocumentStatus } from '@/types/storage';
+import { CreateFolderModal, RenameFolderModal, DeleteConfirmModal } from '@/components/modals';
 import { Loader2 } from 'lucide-react';
 
 export default function Dashboard() {
     const router = useRouter();
 
     // 使用 Supabase 认证
-    const storageContext = useStorage() as any;
+    const storageContext = useStorage();
     const { currentUser, loading: authLoading, signOut, getAllDocuments, saveDocument, deleteDocument, moveDocument } = storageContext;
 
     // Managers
@@ -32,7 +34,7 @@ export default function Dashboard() {
     } = folderManager as any;
 
     // Document State
-    const [documents, setDocuments] = useState<any[]>([]);
+    const [documents, setDocuments] = useState<Document[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -48,15 +50,7 @@ export default function Dashboard() {
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    // Initial Load
-    useEffect(() => {
-        if (!currentUser?.uid) return;
-        setLoading(true);
-        loadFolders();
-        loadDocuments();
-        setLoading(false);
-    }, [currentUser?.uid, loadFolders]);
-
+    // Load Documents
     const loadDocuments = useCallback(async () => {
         if (!currentUser?.uid) return;
         try {
@@ -66,6 +60,24 @@ export default function Dashboard() {
             console.error('加载文档失败:', error);
         }
     }, [currentUser?.uid, getAllDocuments]);
+
+    // Initial Load
+    useEffect(() => {
+        if (!currentUser?.uid) return;
+
+        const loadData = async () => {
+            setLoading(true);
+            try {
+                await Promise.all([loadFolders(), loadDocuments()]);
+            } catch (error) {
+                console.error('加载数据失败:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadData();
+    }, [currentUser?.uid, loadFolders, loadDocuments]);
 
     // Global Click Listener for Menu
     useEffect(() => {
@@ -88,11 +100,11 @@ export default function Dashboard() {
             const newDoc = {
                 title: '无标题文档',
                 content: '',
-                status: DOC_STATUS.DRAFT,
+                status: DOC_STATUS.DRAFT as DocumentStatus,
                 contentType: 'html',
                 folderId: selectedFolderId
             };
-            const savedDoc = await saveDocument(currentUser.uid, null, newDoc);
+            const savedDoc = await saveDocument(currentUser!.uid, null, newDoc);
             if (savedDoc?.id) {
                 router.push(`/editor/${savedDoc.id}`);
             }
@@ -115,7 +127,7 @@ export default function Dashboard() {
     };
 
     const handleMoveDoc = async (targetFolderId: string | null) => {
-        if (!moveDocId) return;
+        if (!moveDocId || !currentUser) return;
         try {
             await moveDocument(currentUser.uid, moveDocId, targetFolderId);
             setMoveDocId(null);
@@ -159,8 +171,8 @@ export default function Dashboard() {
             if (sortBy === 'title') {
                 return (a.title || '').localeCompare(b.title || '');
             }
-            const timeA = a[sortBy] ? new Date(a[sortBy]).getTime() : 0;
-            const timeB = b[sortBy] ? new Date(b[sortBy]).getTime() : 0;
+            const timeA = a[sortBy] ? new Date(a[sortBy] as string).getTime() : 0;
+            const timeB = b[sortBy] ? new Date(b[sortBy] as string).getTime() : 0;
             return timeB - timeA;
         });
 
@@ -181,7 +193,7 @@ export default function Dashboard() {
             const folderId = over.id;
             const docId = active.id;
             const doc = documents.find(d => d.id === docId);
-            if (doc && doc.parentId !== folderId) {
+            if (doc && doc.parentId !== folderId && currentUser) {
                 try {
                     await moveDocument(currentUser.uid, docId, folderId);
                     await loadDocuments();
@@ -192,6 +204,9 @@ export default function Dashboard() {
         }
     };
 
+    // 注意：不再自动重定向到登录页，避免与 Login 页面形成循环
+    // 如果用户未登录，只显示加载状态，让用户手动访问 /login
+
     // 认证加载中或未登录时显示加载状态
     if (authLoading) {
         return (
@@ -201,10 +216,16 @@ export default function Dashboard() {
         );
     }
 
-    // 未登录时重定向到登录页
+    // 未登录时显示提示，而不是自动重定向
     if (!currentUser) {
-        router.push('/login');
-        return null;
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="text-center">
+                    <p className="text-gray-600 mb-4">请先登录</p>
+                    <a href="/login" className="text-blue-600 hover:underline">前往登录页面</a>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -320,43 +341,30 @@ export default function Dashboard() {
                 )}
 
                 {isCreateFolderModalOpen && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white p-6 rounded-lg shadow-xl w-96">
-                            <h3 className="text-lg font-bold mb-4">新建文件夹</h3>
-                            <input type="text" className="w-full border border-gray-300 rounded p-2 mb-4 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="文件夹名称" value={folderNameInput} onChange={e => setFolderNameInput(e.target.value)} autoFocus />
-                            <div className="flex justify-end gap-2">
-                                <button onClick={() => setIsCreateFolderModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">取消</button>
-                                <button onClick={handleCreateFolder} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">创建</button>
-                            </div>
-                        </div>
-                    </div>
+                    <CreateFolderModal
+                        isOpen={isCreateFolderModalOpen}
+                        folderName={folderNameInput}
+                        onFolderNameChange={setFolderNameInput}
+                        onCancel={() => setIsCreateFolderModalOpen(false)}
+                        onCreate={handleCreateFolder}
+                    />
                 )}
 
                 {isRenameModalOpen && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white p-6 rounded-lg shadow-xl w-96">
-                            <h3 className="text-lg font-bold mb-4">重命名文件夹</h3>
-                            <input type="text" className="w-full border border-gray-300 rounded p-2 mb-4 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="文件夹名称" value={folderNameInput} onChange={e => setFolderNameInput(e.target.value)} autoFocus />
-                            <div className="flex justify-end gap-2">
-                                <button onClick={() => setIsRenameModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">取消</button>
-                                <button onClick={handleRenameFolder} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">保存</button>
-                            </div>
-                        </div>
-                    </div>
+                    <RenameFolderModal
+                        isOpen={isRenameModalOpen}
+                        folderName={folderNameInput}
+                        onFolderNameChange={setFolderNameInput}
+                        onCancel={() => setIsRenameModalOpen(false)}
+                        onSave={handleRenameFolder}
+                    />
                 )}
 
-                {deleteDocId && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
-                            <h3 className="text-lg font-bold text-gray-900">确认删除</h3>
-                            <p className="my-4 text-gray-600">您确定要删除这个文档吗?此操作无法撤销。</p>
-                            <div className="flex justify-end gap-4 mt-6">
-                                <button onClick={() => setDeleteDocId(null)} className="bg-gray-200 text-gray-800 py-2 px-4 rounded-lg font-semibold hover:bg-gray-300 transition">取消</button>
-                                <button onClick={handleDeleteDoc} className="bg-red-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-red-700 transition">确认删除</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                <DeleteConfirmModal
+                    isOpen={!!deleteDocId}
+                    onCancel={() => setDeleteDocId(null)}
+                    onConfirm={handleDeleteDoc}
+                />
 
                 <FolderSelector isOpen={!!moveDocId} folders={folders} currentFolderId={documents.find(d => d.id === moveDocId)?.parentId || null} onSelect={handleMoveDoc} onCancel={() => setMoveDocId(null)} />
 

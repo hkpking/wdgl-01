@@ -20,7 +20,8 @@ export default function LoginPage() {
     // 如果已登录，跳转到 Dashboard
     useEffect(() => {
         if (!loading && currentUser) {
-            router.push('/dashboard');
+            console.log('[Login] 检测到已登录用户，跳转到 Dashboard');
+            router.replace('/dashboard');
         }
     }, [currentUser, loading, router]);
 
@@ -35,10 +36,13 @@ export default function LoginPage() {
 
         setSubmitting(true);
         try {
-            await signIn(email, password);
-            router.push('/dashboard');
+            console.log('[Login] 开始登录...');
+            const user = await signIn(email, password);
+            console.log('[Login] 登录成功:', user?.email);
+            // 使用 window.location 强制跳转
+            window.location.href = '/dashboard';
         } catch (err: any) {
-            console.error('登录失败:', err);
+            console.error('[Login] 登录失败:', err);
             // 处理 Supabase 错误信息
             if (err.message?.includes('Invalid login credentials')) {
                 setError('邮箱或密码错误');

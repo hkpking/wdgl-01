@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import * as storage from '@/lib/storage';
 import { DOC_STATUS } from '@/lib/constants';
 import { isPlainText, plainTextToHtml } from '@/lib/editor-utils';
 
-export const useDocumentData = (id, currentUser) => {
+/**
+ * useDocumentData - 加载和管理文档数据
+ * @param {string} id - 文档 ID
+ * @param {object} currentUser - 当前用户对象
+ * @param {object} storageApi - 存储 API (来自 useStorage() 或其他存储实现)
+ */
+export const useDocumentData = (id, currentUser, storageApi) => {
     const [document, setDocument] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -14,7 +19,7 @@ export const useDocumentData = (id, currentUser) => {
 
     const loadDocument = useCallback(async (forceReload = false) => {
         // 基本检查
-        if (!id || !currentUser) return;
+        if (!id || !currentUser || !storageApi) return;
 
         // 如果正在加载中，不重复发起请求
         if (isLoadingRef.current) {
@@ -34,7 +39,7 @@ export const useDocumentData = (id, currentUser) => {
 
         try {
             console.log('[LOAD] Loading document:', id);
-            const doc = storage.getDocument(currentUser.uid, id);
+            const doc = await storageApi.getDocument(currentUser.uid, id);
 
             if (doc) {
                 console.log('[LOAD] Document loaded successfully:', id);
@@ -57,7 +62,7 @@ export const useDocumentData = (id, currentUser) => {
             } else {
                 // 创建新文档
                 console.log('[LOAD] Creating new document:', id);
-                const newDoc = storage.saveDocument(currentUser.uid, id, {
+                const newDoc = await storageApi.saveDocument(currentUser.uid, id, {
                     title: '',
                     content: '',
                     status: DOC_STATUS.DRAFT
@@ -78,7 +83,7 @@ export const useDocumentData = (id, currentUser) => {
             setLoading(false);
             isLoadingRef.current = false;
         }
-    }, [id, currentUser?.uid, document]);
+    }, [id, currentUser?.uid, document, storageApi]);
 
     // 只在 id 或 currentUser.uid 变化时加载
     const prevIdRef = useRef(null);
@@ -109,3 +114,4 @@ export const useDocumentData = (id, currentUser) => {
 
     return { document, loading, error, reload, setDocument };
 };
+

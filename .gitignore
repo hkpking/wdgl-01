@@ -137,5 +137,6 @@ credentials/
 .env.*
 !.env.example
 
-# Agent 规则文件 (包含环境敏感信息)
-.agent/
+# Agent 敏感信息目录 (含 IP、密码等)
+# .agent/secrets/ - 部署时临时放开
+.agent/workflows/

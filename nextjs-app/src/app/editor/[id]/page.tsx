@@ -18,24 +18,16 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useDocumentExport } from '@/hooks/useDocumentExport';
 import CollaborationStatus from '@/components/shared/CollaborationStatus';
 import EditModeSelector from '@/components/EditModeSelector';
-import * as storage from '@/lib/storage';
+import { useStorage } from '@/contexts/StorageContext';
 
 export default function EditorPage() {
     const params = useParams();
     const router = useRouter();
     const id = params.id as string;
 
-    // 使用 mock 用户
-    const [currentUser, setCurrentUser] = useState<any>(null);
-
-    useEffect(() => {
-        const user = storage.getCurrentUser();
-        if (!user) {
-            router.push('/login');
-            return;
-        }
-        setCurrentUser(user);
-    }, [router]);
+    // 使用 Storage Context 获取用户和存储 API
+    const storageContext = useStorage() as any;
+    const { currentUser, loading: authLoading, getComments, addComment, addReply, updateCommentStatus, deleteComment, saveDocument, saveVersion } = storageContext;
 
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
@@ -61,8 +53,8 @@ export default function EditorPage() {
     // Edit Mode State
     const [editMode, setEditMode] = useState('editing');
 
-    // Document Data Hook
-    const { document: loadedDoc, loading, error, reload } = useDocumentData(id, currentUser) as any;
+    // Document Data Hook (传入 storageContext 作为 storageApi)
+    const { document: loadedDoc, loading, error, reload } = useDocumentData(id, currentUser, storageContext) as any;
 
     // 追踪已处理的文档
     const processedDocRef = useRef<string | null>(null);
@@ -79,14 +71,14 @@ export default function EditorPage() {
         // 异步加载评论
         const loadComments = async () => {
             try {
-                const loadedComments = storage.getComments(currentUser?.uid, id);
+                const loadedComments = await getComments(currentUser?.uid, id);
                 setComments(loadedComments || []);
             } catch (err) {
                 console.error('加载评论失败:', err);
                 setComments([]);
             }
         };
-        if (currentUser) loadComments();
+        if (currentUser && getComments) loadComments();
     }, [loadedDoc?.id, currentUser, id]);
 
     // Update browser tab title
@@ -101,12 +93,13 @@ export default function EditorPage() {
         };
     }, [title]);
 
-    // Auto Save Hook
+    // Auto Save Hook (传入 storageContext 作为 storageApi)
     const documentState = useMemo(() => ({ title, content, status }), [title, content, status]);
     const { saving, lastSaved, handleSave, isDirty } = useAutoSave(
         id,
         currentUser,
         documentState,
+        storageContext,
         isVersionHistoryOpen
     );
 
@@ -137,7 +130,7 @@ export default function EditorPage() {
         };
 
         try {
-            const newComment = storage.addComment(currentUser.uid, id, commentData);
+            const newComment = await addComment(currentUser.uid, id, commentData);
             if (!newComment) {
                 alert('评论保存失败，请重试');
                 return;
@@ -169,7 +162,7 @@ export default function EditorPage() {
             }
         };
         try {
-            const newReply = storage.addReply(currentUser.uid, id, commentId, replyData);
+            const newReply = await addReply(currentUser.uid, id, commentId, replyData);
             if (!newReply) return;
             setComments(comments.map(c => {
                 if (c.id === commentId) {
@@ -184,7 +177,7 @@ export default function EditorPage() {
 
     const handleResolve = async (commentId: string) => {
         try {
-            const result = storage.updateCommentStatus(currentUser.uid, id, commentId, 'resolved');
+            const result = await updateCommentStatus(currentUser.uid, id, commentId, 'resolved');
             if (result) {
                 setComments(comments.map(c => c.id === commentId ? { ...c, status: 'resolved' } : c));
             }
@@ -196,7 +189,7 @@ export default function EditorPage() {
     const handleDelete = async (commentId: string) => {
         if (window.confirm('确定要删除这条评论吗？')) {
             try {
-                storage.deleteComment(currentUser.uid, id, commentId);
+                await deleteComment(currentUser.uid, id, commentId);
                 setComments(comments.filter(c => c.id !== commentId));
             } catch (error) {
                 console.error('删除评论失败:', error);
@@ -260,15 +253,15 @@ export default function EditorPage() {
             setContent(viewingVersion.content);
             setIsVersionHistoryOpen(false);
             setViewingVersion(null);
-            setTimeout(() => {
+            setTimeout(async () => {
                 const docData = {
                     title,
                     content: viewingVersion.content,
                     status,
                     contentType: 'html'
                 };
-                storage.saveDocument(currentUser.uid, id, docData);
-                storage.saveVersion(currentUser.uid, id, { title, content: viewingVersion.content, status });
+                await saveDocument(currentUser.uid, id, docData);
+                if (saveVersion) await saveVersion(currentUser.uid, id, { title, content: viewingVersion.content, status });
                 window.location.reload();
             }, 100);
         }

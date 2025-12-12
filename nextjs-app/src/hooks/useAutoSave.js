@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import * as storage from '@/lib/storage';
 
-export const useAutoSave = (id, currentUser, documentState, isPaused = false) => {
+/**
+ * useAutoSave - 自动保存文档
+ * @param {string} id - 文档 ID
+ * @param {object} currentUser - 当前用户对象
+ * @param {object} documentState - 文档状态 { title, content, status }
+ * @param {object} storageApi - 存储 API (来自 useStorage() 或其他存储实现)
+ * @param {boolean} isPaused - 是否暂停自动保存
+ */
+export const useAutoSave = (id, currentUser, documentState, storageApi, isPaused = false) => {
     const [saving, setSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState(null);
     const [lastSavedState, setLastSavedState] = useState(null);
@@ -18,7 +25,7 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
     }, [documentState, lastSavedState]);
 
     const handleSave = useCallback(async () => {
-        if (!documentState || !documentState.title.trim() || !currentUser) return;
+        if (!documentState || !documentState.title.trim() || !currentUser || !storageApi) return;
 
         setSaving(true);
         try {
@@ -30,14 +37,16 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
             };
 
             console.log('[SAVE] Saving document:', id);
-            storage.saveDocument(currentUser.uid, id, docData);
+            await storageApi.saveDocument(currentUser.uid, id, docData);
 
-            // Save version history
-            storage.saveVersion(currentUser.uid, id, {
-                title: documentState.title,
-                content: documentState.content,
-                status: documentState.status
-            });
+            // Save version history (if available)
+            if (storageApi.saveVersion) {
+                await storageApi.saveVersion(currentUser.uid, id, {
+                    title: documentState.title,
+                    content: documentState.content,
+                    status: documentState.status
+                });
+            }
 
             const now = new Date();
             setLastSaved(now);
@@ -53,7 +62,7 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
         } finally {
             setSaving(false);
         }
-    }, [id, currentUser?.uid, documentState]);
+    }, [id, currentUser?.uid, documentState, storageApi]);
 
     // Check if content has changed
     const isDirty = documentState && lastSavedState ? (
@@ -85,3 +94,4 @@ export const useAutoSave = (id, currentUser, documentState, isPaused = false) =>
 
     return { saving, lastSaved, handleSave, isDirty };
 };
+
