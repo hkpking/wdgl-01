@@ -470,3 +470,106 @@
     color: white;
     border-radius: 2px;
 }
+
+/* ========================================
+   Collaboration Cursor & Remote User Styles
+   ======================================== */
+
+/* 远程用户光标 */
+.collaboration-cursor__caret {
+    position: relative;
+    margin-left: -1px;
+    margin-right: -1px;
+    border-left: 2px solid;
+    border-right: none;
+    word-break: normal;
+    pointer-events: none;
+    animation: collaboration-cursor-blink 1s ease-in-out infinite;
+}
+
+@keyframes collaboration-cursor-blink {
+
+    0%,
+    50% {
+        opacity: 1;
+    }
+
+    51%,
+    100% {
+        opacity: 0.7;
+    }
+}
+
+/* 用户名称标签 */
+.collaboration-cursor__label {
+    position: absolute;
+    left: -1px;
+    top: -1.4em;
+    border-radius: 4px 4px 4px 0;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+    color: white;
+    user-select: none;
+    pointer-events: none;
+    z-index: 50;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    animation: collaboration-label-fadein 0.2s ease-out;
+}
+
+@keyframes collaboration-label-fadein {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 远程用户选区 - 使用 y-prosemirror 默认类名 */
+.ProseMirror .yRemoteSelection {
+    background-color: var(--user-color, rgba(59, 130, 246, 0.15));
+    border-radius: 2px;
+}
+
+/* 远程用户光标头部（y-prosemirror 默认） */
+.ProseMirror .yRemoteSelectionHead {
+    position: absolute;
+    border-left: 2px solid var(--user-color, #3b82f6);
+    border-top: none;
+    border-bottom: none;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* 远程用户名称标签（y-prosemirror 扩展） */
+.ProseMirror .yRemoteSelectionHead::after {
+    content: attr(data-user);
+    position: absolute;
+    left: -1px;
+    top: -1.4em;
+    background-color: var(--user-color, #3b82f6);
+    color: white;
+    padding: 1px 6px;
+    border-radius: 4px 4px 4px 0;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+    user-select: none;
+    pointer-events: none;
+    z-index: 50;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* 协作冲突提示 - 多用户同时编辑同一区域 */
+.ProseMirror .collaboration-conflict {
+    background-color: rgba(251, 146, 60, 0.2);
+    border: 1px dashed #fb923c;
+    border-radius: 2px;
+}

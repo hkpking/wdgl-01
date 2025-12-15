@@ -17,8 +17,10 @@ import { DOC_STATUS, STATUS_LABELS } from '@/lib/constants';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useDocumentExport } from '@/hooks/useDocumentExport';
 import CollaborationStatus from '@/components/shared/CollaborationStatus';
+import CollaborationToast, { useCollaborationToast } from '@/components/shared/CollaborationToast';
 import EditModeSelector from '@/components/EditModeSelector';
 import { useStorage } from '@/contexts/StorageContext';
+import { useCollaboration } from '@/hooks/useCollaboration';
 
 export default function EditorPage() {
     const params = useParams();
@@ -52,6 +54,51 @@ export default function EditorPage() {
 
     // Edit Mode State
     const [editMode, setEditMode] = useState('editing');
+
+    // 协作功能 Hook
+    const collaborationUser = useMemo(() => currentUser ? {
+        id: currentUser.uid,
+        name: currentUser.displayName || currentUser.email || '匿名用户',
+    } : null, [currentUser?.uid, currentUser?.displayName, currentUser?.email]);
+
+    // 协作通知 Toast
+    const { toasts, dismissToast, notifyUserJoined, notifyUserLeft } = useCollaborationToast();
+
+    const {
+        ydoc,
+        provider,
+        isConnected,
+        connectedUsers,
+        connectionError,
+        reconnectAttempts,
+        reconnect,
+    } = useCollaboration(id, collaborationUser as any, {
+        onUserJoined: notifyUserJoined,
+        onUserLeft: notifyUserLeft,
+    }) as any;
+
+    // 协作模式配置（仅在 ydoc 和 provider 都存在且已连接时启用）
+    // 重要：必须等待 isConnected 为 true，并且验证 ydoc 未被销毁
+    const collaboration = useMemo(() => {
+        // 严格检查：所有协作组件都必须就绪
+        if (!ydoc || !provider || !collaborationUser || !isConnected) {
+            return undefined;
+        }
+
+        // 检查 ydoc 是否已被销毁（有时连接断开后 ydoc 会被清理）
+        try {
+            // 尝试访问 ydoc 的基本属性来验证其完整性
+            if (typeof ydoc.getText !== 'function') {
+                console.warn('[Collaboration] ydoc 已失效');
+                return undefined;
+            }
+        } catch (err) {
+            console.warn('[Collaboration] ydoc 检查失败:', err);
+            return undefined;
+        }
+
+        return { ydoc, provider, user: collaborationUser };
+    }, [ydoc, provider, collaborationUser, isConnected]);
 
     // Document Data Hook (传入 storageContext 作为 storageApi)
     const { document: loadedDoc, loading, error, reload } = useDocumentData(id, currentUser, storageContext) as any;
@@ -388,11 +435,11 @@ export default function EditorPage() {
                     editor={editorInstance}
                 >
                     <CollaborationStatus
-                        connectedUsers={[]}
-                        isConnected={true}
-                        connectionError={null}
-                        reconnectAttempts={0}
-                        onReconnect={() => { }}
+                        connectedUsers={connectedUsers}
+                        isConnected={isConnected}
+                        connectionError={connectionError}
+                        reconnectAttempts={reconnectAttempts}
+                        onReconnect={reconnect}
                     />
                     <EditModeSelector
                         mode={editMode}
@@ -424,6 +471,7 @@ export default function EditorPage() {
                                 editable={canEdit}
                                 onEditorReady={setEditorInstance}
                                 onMagicCommand={handleOpenMagicCommand}
+                                collaboration={collaboration}
                             />
                         </div>
                     </div>
@@ -486,6 +534,9 @@ export default function EditorPage() {
                     </div>
                 )}
             </div>
+
+            {/* 协作用户上线/下线通知 */}
+            <CollaborationToast toasts={toasts} onDismiss={dismissToast} />
         </div>
     );
 }

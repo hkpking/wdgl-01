@@ -6,7 +6,8 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
-import { IndexeddbPersistence } from 'y-indexeddb';
+// TODO: 添加 y-indexeddb 支持离线功能 (需要解决 TipTap 版本冲突)
+// import { IndexeddbPersistence } from 'y-indexeddb';
 import collaborationConfig from '../config/collaboration';
 
 // 重连配置
@@ -20,9 +21,13 @@ const RECONNECT_CONFIG = {
  * 使用协作功能的 Hook
  * @param {string} documentId - 文档 ID，用作协作房间名
  * @param {object} user - 当前用户信息 { id, name, color }
+ * @param {object} options - 可选配置
+ * @param {function} options.onUserJoined - 用户加入回调 (user) => void
+ * @param {function} options.onUserLeft - 用户离开回调 (user) => void
  * @returns {object} { ydoc, provider, isConnected, isSynced, connectedUsers, connectionError, reconnect }
  */
-export function useCollaboration(documentId, user) {
+export function useCollaboration(documentId, user, options = {}) {
+    const { onUserJoined, onUserLeft } = options;
     const [isConnected, setIsConnected] = useState(false);
     const [isSynced, setIsSynced] = useState(false);
     const [connectedUsers, setConnectedUsers] = useState([]);
@@ -31,6 +36,8 @@ export function useCollaboration(documentId, user) {
 
     const reconnectTimeoutRef = useRef(null);
     const providerRef = useRef(null);
+    // 记录上一次的用户列表，用于检测用户变化
+    const prevUsersRef = useRef([]);
 
     // 创建 Yjs 文档
     const ydoc = useMemo(() => {
@@ -75,20 +82,17 @@ export function useCollaboration(documentId, user) {
         return wsProvider;
     }, [ydoc, documentId]);
 
-    // 本地持久化 (离线支持)
-    useEffect(() => {
-        if (!ydoc || !documentId) return;
-
-        const indexeddbProvider = new IndexeddbPersistence(documentId, ydoc);
-
-        indexeddbProvider.on('synced', () => {
-            console.log('[Collaboration] 本地缓存已同步');
-        });
-
-        return () => {
-            indexeddbProvider.destroy();
-        };
-    }, [ydoc, documentId]);
+    // TODO: 本地持久化 (离线支持) - 需要安装 y-indexeddb
+    // useEffect(() => {
+    //     if (!ydoc || !documentId) return;
+    //     const indexeddbProvider = new IndexeddbPersistence(documentId, ydoc);
+    //     indexeddbProvider.on('synced', () => {
+    //         console.log('[Collaboration] 本地缓存已同步');
+    //     });
+    //     return () => {
+    //         indexeddbProvider.destroy();
+    //     };
+    // }, [ydoc, documentId]);
 
     // 连接状态管理（增强版）
     useEffect(() => {
@@ -148,7 +152,8 @@ export function useCollaboration(documentId, user) {
             provider.awareness.setLocalStateField('user', {
                 id: user.id || user.uid,
                 name: user.name || user.displayName || user.email || '匿名用户',
-                color: user.color || collaborationConfig.getRandomColor()
+                // 使用基于用户 ID 的固定颜色，确保同一用户在不同设备/会话中颜色一致
+                color: user.color || collaborationConfig.getColorByUserId(user.id || user.uid)
             });
 
             // 监听其他用户
@@ -157,6 +162,33 @@ export function useCollaboration(documentId, user) {
                 const users = states
                     .filter(state => state.user)
                     .map(state => state.user);
+
+                // 检测用户变化（排除自己）
+                const prevUsers = prevUsersRef.current;
+                const selfId = user.id || user.uid;
+
+                // 找出新加入的用户
+                const joinedUsers = users.filter(u =>
+                    u.id !== selfId &&
+                    !prevUsers.some(prev => prev.id === u.id)
+                );
+
+                // 找出离开的用户
+                const leftUsers = prevUsers.filter(prev =>
+                    prev.id !== selfId &&
+                    !users.some(u => u.id === prev.id)
+                );
+
+                // 触发回调
+                joinedUsers.forEach(u => {
+                    if (onUserJoined) onUserJoined(u);
+                });
+                leftUsers.forEach(u => {
+                    if (onUserLeft) onUserLeft(u);
+                });
+
+                // 更新上一次用户列表
+                prevUsersRef.current = users;
                 setConnectedUsers(users);
             };
 

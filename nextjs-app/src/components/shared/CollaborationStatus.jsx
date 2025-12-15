@@ -77,7 +77,7 @@ export default function CollaborationStatus({
                     <div className="flex -space-x-2">
                         {connectedUsers.slice(0, 5).map((user, index) => (
                             <div
-                                key={user.id || index}
+                                key={`${user.id || 'user'}-${index}`}
                                 className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-xs font-medium text-white shadow-sm"
                                 style={{ backgroundColor: user.color || '#6B7280' }}
                                 title={user.name || '匿名用户'}

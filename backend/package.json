@@ -1,15 +1,17 @@
 {
     "name": "wdgl-collaboration-server",
     "version": "1.0.0",
-    "description": "y-websocket 协作服务器",
+    "description": "y-websocket 协作服务器 (v3.0.0)",
+    "type": "module",
     "main": "ws-server.js",
     "scripts": {
         "start": "node ws-server.js",
         "dev": "node ws-server.js"
     },
     "dependencies": {
+        "@y/websocket-server": "^0.1.1",
         "ws": "^8.14.0",
-        "y-websocket": "^1.5.0",
+        "y-websocket": "^3.0.0",
         "yjs": "^13.6.0"
     }
 }

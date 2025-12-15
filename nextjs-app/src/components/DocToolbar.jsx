@@ -73,6 +73,15 @@ export default function DocToolbar({ editor, onAddComment }) {
         return null;
     }
 
+    // 确保编辑器视图已完全初始化，避免 "The editor view is not available" 错误
+    // 检查条件：
+    // 1. editor.view 存在
+    // 2. editor.view.dom 存在（表示编辑器已挂载到 DOM）
+    // 3. editor 未被销毁
+    if (!editor.view || !editor.view.dom || editor.isDestroyed) {
+        return null;
+    }
+
     const handleSetLink = () => {
         if (linkUrl) {
             editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl }).run();
@@ -83,6 +92,23 @@ export default function DocToolbar({ editor, onAddComment }) {
 
     // ToolbarButton 和 ToolbarSeparator 已从 shared/ 导入，使用 google-docs variant
 
+    // 安全的 undo/redo 检查 - 避免在视图未完全就绪时调用 focus()
+    const canUndo = (() => {
+        try {
+            return editor.can().undo();
+        } catch {
+            return false;
+        }
+    })();
+
+    const canRedo = (() => {
+        try {
+            return editor.can().redo();
+        } catch {
+            return false;
+        }
+    })();
+
     const isTableActive = editor.isActive('table');
 
     return (
@@ -90,14 +116,14 @@ export default function DocToolbar({ editor, onAddComment }) {
             {/* History */}
             <ToolbarButton
                 onClick={() => editor.chain().focus().undo().run()}
-                disabled={!editor.can().chain().focus().undo().run()}
+                disabled={!canUndo}
                 title="撤销 (Ctrl+Z)"
             >
                 <Undo size={16} />
             </ToolbarButton>
             <ToolbarButton
                 onClick={() => editor.chain().focus().redo().run()}
-                disabled={!editor.can().chain().focus().redo().run()}
+                disabled={!canRedo}
                 title="重做 (Ctrl+Y)"
             >
                 <Redo size={16} />

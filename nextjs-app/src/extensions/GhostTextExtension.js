@@ -79,6 +79,41 @@ export const GhostText = Extension.create({
                     return true;
                 }
                 return false;
+            },
+            // 新增：接受第一句话（到首个句号/问号/感叹号）
+            acceptGhostTextSentence: () => ({ editor, view }) => {
+                const text = editor.storage.ghostText.text;
+                if (!text) return false;
+
+                // 匹配第一个句子（到句号、问号、感叹号）
+                const match = text.match(/^[\s\S]*?[.?!。？！]/);
+                let sentence = '';
+
+                if (match) {
+                    sentence = match[0];
+                } else {
+                    // 没有句号，接受全部
+                    sentence = text;
+                }
+
+                if (sentence) {
+                    editor.commands.insertContent(sentence);
+
+                    const remaining = text.slice(sentence.length);
+                    editor.storage.ghostText.text = remaining;
+
+                    if (remaining.length === 0) {
+                        view.dispatch(view.state.tr.setMeta('ghostText', { clear: true }));
+                    } else {
+                        view.dispatch(view.state.tr.setMeta('ghostText', {
+                            add: true,
+                            text: remaining,
+                            pos: view.state.selection.to + sentence.length
+                        }));
+                    }
+                    return true;
+                }
+                return false;
             }
         };
     },
@@ -91,6 +126,8 @@ export const GhostText = Extension.create({
             'Control-ArrowRight': () => this.editor.commands.acceptGhostTextWord(),
             'Cmd-ArrowRight': () => this.editor.commands.acceptGhostTextWord(),
             'Alt-ArrowRight': () => this.editor.commands.acceptGhostTextWord(),
+            // 新增：接受第一句
+            'Shift-Tab': () => this.editor.commands.acceptGhostTextSentence(),
         };
     },
 
@@ -112,14 +149,14 @@ export const GhostText = Extension.create({
             // Smart Filter for Auto-Trigger
             if (!manual) {
                 // Don't trigger if typing in middle of word
-                const charBefore = state.doc.textBetween(selection.from - 1, selection.from);
-                const charAfter = state.doc.textBetween(selection.from, selection.from + 1);
+                const charBefore = state.doc.textBetween(Math.max(0, selection.from - 1), selection.from);
+                const charAfter = state.doc.textBetween(selection.from, Math.min(selection.from + 1, state.doc.content.size));
 
                 // If char after is a word character, we are likely editing mid-word
                 if (charAfter && /\w/.test(charAfter)) return;
 
-                // If char before is empty (start of doc) or space/newline, good.
-                // If char before is a word char, good (end of word).
+                // 句子结束符后更积极触发（用于动态延迟计算）
+                // 这里仅做记录，延迟计算在 view.update 中处理
             }
 
             // Abort previous stream if active
@@ -212,11 +249,26 @@ export const GhostText = Extension.create({
 
                             if (action.add) {
                                 const widget = Decoration.widget(action.pos, () => {
+                                    const container = document.createElement('span');
+                                    container.className = 'ghost-text-container';
+                                    container.style.cssText = 'position: relative; display: inline;';
+
+                                    // 补全文本
                                     const span = document.createElement('span');
-                                    span.className = 'text-slate-400 pointer-events-none select-none italic';
+                                    span.className = 'ghost-text-content';
+                                    span.style.cssText = 'color: #94a3b8; background: rgba(59, 130, 246, 0.08); padding: 0 2px; border-radius: 2px; font-style: italic; pointer-events: none; user-select: none;';
                                     span.dataset.ghost = 'true';
                                     span.textContent = action.text;
-                                    return span;
+
+                                    // Tab 提示（仅显示一次）
+                                    const hint = document.createElement('span');
+                                    hint.className = 'ghost-text-hint';
+                                    hint.style.cssText = 'margin-left: 8px; padding: 1px 6px; background: rgba(59, 130, 246, 0.15); color: #3b82f6; font-size: 10px; border-radius: 3px; font-style: normal; pointer-events: none; user-select: none;';
+                                    hint.textContent = 'Tab →';
+
+                                    container.appendChild(span);
+                                    container.appendChild(hint);
+                                    return container;
                                 }, { side: 1 });
                                 return DecorationSet.create(tr.doc, [widget]);
                             }
@@ -335,11 +387,16 @@ export const GhostText = Extension.create({
                             const autocompleteEnabled = localStorage.getItem('wdgl_ai_autocomplete_enabled') !== 'false';
                             if (!autocompleteEnabled) return;
 
+                            // 智能延迟：句子结束符后 1 秒，其他情况 2 秒
+                            const charBefore = state.doc.textBetween(Math.max(0, selection.from - 1), selection.from);
+                            const isSentenceEnd = /[.?!。？！]/.test(charBefore);
+                            const delay = isSentenceEnd ? 1000 : 2000;
+
                             debounceTimer = setTimeout(() => {
                                 if (view.hasFocus()) {
                                     trigger(view, false); // false = auto trigger
                                 }
-                            }, 2000); // 2秒延迟，减少 API 调用频率
+                            }, delay);
                         }
                     };
                 },

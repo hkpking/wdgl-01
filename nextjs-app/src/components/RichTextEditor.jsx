@@ -29,8 +29,7 @@ import { SearchReplaceExtension } from '../extensions/SearchReplaceExtension';
 import TableContextMenu from './TableContextMenu';
 import SearchReplace from './SearchReplace';
 import SelectionMenu from './SelectionMenu';
-import { Collaboration } from '@tiptap/extension-collaboration';
-import { CollaborationCursor } from '@tiptap/extension-collaboration-cursor';
+import { ySyncPlugin, yCursorPlugin } from 'y-prosemirror';
 import './editor.css';
 
 /**
@@ -64,8 +63,12 @@ export default function RichTextEditor({
     const collaborationRef = useRef(collaboration);
     collaborationRef.current = collaboration;
 
-    // 判断是否为协作模式
-    const isCollaborationMode = !!(collaboration?.ydoc && collaboration?.provider);
+    // 判断是否为协作模式 - 严格检查确保 ydoc 未被销毁
+    const isCollaborationMode = !!(
+        collaboration?.ydoc &&
+        collaboration?.provider &&
+        typeof collaboration.ydoc.getText === 'function'
+    );
 
     // 构建扩展列表
     const extensions = useMemo(() => {
@@ -192,20 +195,42 @@ export default function RichTextEditor({
             }),
         ];
 
-        // 协作模式扩展
-        if (isCollaborationMode) {
-            baseExtensions.push(
-                Collaboration.configure({
-                    document: collaborationRef.current.ydoc,
-                }),
-                CollaborationCursor.configure({
-                    provider: collaborationRef.current.provider,
-                    user: collaborationRef.current.user || {
-                        name: '匿名用户',
-                        color: '#6B7280'
-                    },
-                })
-            );
+        // 协作模式扩展 - 添加安全检查确保 ydoc 和 provider 完全初始化
+        if (isCollaborationMode && collaborationRef.current?.ydoc && collaborationRef.current?.provider) {
+            const ydoc = collaborationRef.current.ydoc;
+            const provider = collaborationRef.current.provider;
+            const user = collaborationRef.current.user || { name: '匿名用户', color: '#6B7280' };
+
+            // 确保 provider.awareness 已初始化（避免 cursor-plugin 崩溃）
+            const hasAwareness = provider.awareness && typeof provider.awareness.getStates === 'function';
+
+            // 自定义协作扩展，直接使用 y-prosemirror 以解决 Tiptap v3 版本不兼容问题
+            // Tiptap Collaboration v3 使用了 y-tiptap，而 CollaborationCursor v3 仍依赖 y-prosemirror
+            // 这会导致 "Cannot read properties of undefined (reading 'doc')" 错误
+            const CustomCollaboration = Extension.create({
+                name: 'collaboration',
+                priority: 1000,
+                addProseMirrorPlugins() {
+                    const plugins = [];
+                    // 1. 添加文档同步插件
+                    // 注意：ySyncPlugin 需要 Y.XmlFragment 类型，不是 Y.Doc
+                    const fragment = ydoc.getXmlFragment('prosemirror');
+                    plugins.push(ySyncPlugin(fragment));
+
+                    // 2. 如果 awareness 可用，添加光标插件
+                    if (hasAwareness) {
+                        try {
+                            plugins.push(yCursorPlugin(provider.awareness));
+                        } catch (e) {
+                            console.warn('[RichTextEditor] 光标插件初始化失败:', e);
+                        }
+                    }
+
+                    return plugins;
+                }
+            });
+
+            baseExtensions.push(CustomCollaboration);
         }
 
         return baseExtensions;
