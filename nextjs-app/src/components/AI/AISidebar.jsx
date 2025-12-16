@@ -1,26 +1,53 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, X, Send, Paperclip, FileText, Shield, Bot, User } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Sparkles, X, Send, Paperclip, FileText, Shield, Bot, User, Search, Zap } from 'lucide-react';
 import SourceSelector from './SourceSelector';
 import { aiService } from '@/lib/ai/AIService';
 import * as mockStorage from '@/lib/storage';
 
+// 意图识别（客户端版本）
+const INTENT_PATTERNS = [
+    { pattern: /如何|怎么|怎样|步骤|流程|操作|方法/i, intent: 'workflow_guide', hint: '请以清晰的步骤形式回答，使用编号列表展示操作流程。' },
+    { pattern: /规定|制度|政策|标准|要求|规范/i, intent: 'policy_search', hint: '请准确引用相关制度条款，注明来源文档。' },
+    { pattern: /总结|概括|摘要|归纳|概述/i, intent: 'summarization', hint: '请提供简洁的要点总结，使用项目符号列出关键信息。' },
+    { pattern: /区别|不同|差异|对比|比较/i, intent: 'comparison', hint: '请以对比的形式组织回答，清晰展示异同点。' },
+    { pattern: /什么是|是什么|定义|解释|含义/i, intent: 'definition', hint: '请给出准确定义，并提供必要的背景解释。' },
+];
+
+function classifyIntentClient(query) {
+    for (const { pattern, intent, hint } of INTENT_PATTERNS) {
+        if (pattern.test(query)) {
+            return { intent, hint };
+        }
+    }
+    return { intent: 'document_qa', hint: '' };
+}
+
 export default function AISidebar({ currentUser, currentDoc, onClose, embedded = false }) {
     const [messages, setMessages] = useState([
-        { id: 'welcome', role: 'ai', content: '你好！我是您的 AI 助手。我可以帮您总结文档、回答问题，或者查询系统知识库。' }
+        { id: 'welcome', role: 'ai', content: '你好！我是您的 AI 助手。我可以帮您总结文档、回答问题，或查询您的知识库。\n\n💡 **提示**: 我会自动搜索您已保存的文档来回答问题，支持多轮对话记忆。' }
     ]);
     const [input, setInput] = useState('');
     const [isThinking, setIsThinking] = useState(false);
-    const [sources, setSources] = useState([]); // Array of docs
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchStatus, setSearchStatus] = useState(''); // 搜索状态文本
+    const [sources, setSources] = useState([]);
     const [isSourceSelectorOpen, setIsSourceSelectorOpen] = useState(false);
     const messagesEndRef = useRef(null);
     const textareaRef = useRef(null);
 
-    // Initialize with current doc as source
-    useEffect(() => {
-        if (currentDoc) {
-            setSources([{ ...currentDoc, type: 'user' }]);
-        }
-    }, [currentDoc]);
+    // 会话 ID（用于多轮对话）
+    const sessionId = useMemo(() =>
+        `${currentUser?.uid || 'guest'}_${Date.now()}`,
+        [currentUser?.uid]
+    );
+
+    // 不再自动将当前文档添加为 source
+    // 这样语义搜索就能正常工作了
+    // useEffect(() => {
+    //     if (currentDoc) {
+    //         setSources([{ ...currentDoc, type: 'user' }]);
+    //     }
+    // }, [currentDoc]);
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -48,27 +75,135 @@ export default function AISidebar({ currentUser, currentDoc, onClose, embedded =
         }
         setIsThinking(true);
 
-        // Prepare Context
-        let context = '';
-        if (sources.length > 0) {
-            context = sources.map(s => `Document: ${s.title}\nContent: ${s.content || ''}`).join('\n\n');
-        }
+        // 优化后的上下文策略：
+        // 1. 始终执行语义搜索
+        // 2. 合并语义结果与手动来源
+        let semanticResults = [];
+        let contextSource = 'none';
 
-        // Construct Prompt
-        const prompt = `
-You are a helpful AI assistant for a document editor.
-User Query: "${userMsg.content}"
+        try {
+            // 步骤0: 意图识别
+            const intentResult = classifyIntentClient(userMsg.content);
+            console.log(`[AI Sidebar] 意图识别: ${intentResult.intent}`);
 
-Context Documents:
+            // 步骤1: 始终执行语义搜索
+            if (currentUser?.uid) {
+                try {
+                    setIsSearching(true);
+                    setSearchStatus('🔍 正在搜索知识库...');
+                    console.log('[AI Sidebar] 执行语义搜索:', userMsg.content.substring(0, 50));
+
+                    const searchRes = await fetch('/api/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            query: userMsg.content,
+                            userId: currentUser.uid,
+                            topK: 5,
+                            threshold: 0.3,
+                            enableRerank: true,
+                            enableCache: true
+                        })
+                    });
+
+                    if (searchRes.ok) {
+                        const searchData = await searchRes.json();
+                        semanticResults = searchData.results || [];
+                        const cached = searchData.cached ? ' (缓存)' : '';
+                        const reranked = searchData.reranked ? ' (已重排序)' : '';
+                        setSearchStatus(`✅ 找到 ${semanticResults.length} 条相关内容${cached}${reranked}`);
+                        console.log(`[AI Sidebar] 语义搜索返回 ${semanticResults.length} 条结果${cached}${reranked}`);
+                        semanticResults.forEach((r, i) => {
+                            const score = r.rerankScore !== undefined
+                                ? `rerank: ${(r.rerankScore * 100).toFixed(1)}%`
+                                : `相似度: ${(r.similarity * 100).toFixed(1)}%`;
+                            console.log(`  [${i + 1}] "${r.metadata?.title}" (${score})`);
+                        });
+                    } else {
+                        setSearchStatus('⚠️ 搜索未返回结果');
+                        console.error('[AI Sidebar] 搜索请求失败:', searchRes.status);
+                    }
+                } catch (searchErr) {
+                    setSearchStatus('❌ 搜索失败');
+                    console.warn('[AI Sidebar] 语义搜索失败:', searchErr);
+                } finally {
+                    setIsSearching(false);
+                }
+            }
+
+            // 步骤2: 构建语义搜索上下文
+            const semanticContext = semanticResults.length > 0
+                ? semanticResults.map(r =>
+                    `📄 来源: ${r.metadata?.title || '未知文档'} (相似度: ${(r.similarity * 100).toFixed(0)}%)\n${r.chunk_text}`
+                ).join('\n\n---\n\n')
+                : '';
+
+            // 步骤3: 构建手动来源上下文
+            const MAX_DOC_CHARS = 8000;
+            const manualContext = sources.length > 0
+                ? sources.map(s => {
+                    const docContent = s.content || '';
+                    const truncated = docContent.length > MAX_DOC_CHARS
+                        ? docContent.substring(0, MAX_DOC_CHARS) + '\n...[内容已截断]'
+                        : docContent;
+                    return `📄 手动添加: ${s.title}\n${truncated}`;
+                }).join('\n\n---\n\n')
+                : '';
+
+            // 步骤4: 合并上下文
+            let context = '';
+            if (semanticContext && manualContext) {
+                context = `【知识库搜索结果】\n${semanticContext}\n\n===\n\n【手动添加的文档】\n${manualContext}`;
+                contextSource = 'combined';
+            } else if (semanticContext) {
+                context = semanticContext;
+                contextSource = 'semantic';
+            } else if (manualContext) {
+                context = manualContext;
+                contextSource = 'manual';
+            }
+
+            // 步骤5: 截断过长上下文
+            const MAX_CONTEXT_CHARS = 40000;
+            if (context.length > MAX_CONTEXT_CHARS) {
+                context = context.substring(0, MAX_CONTEXT_CHARS) + '\n...[上下文已截断]';
+            }
+
+            // 构建对话历史上下文（最近3轮对话）
+            const recentHistory = messages
+                .filter(m => m.id !== 'welcome')
+                .slice(-6)  // 最近6条消息（3轮对话）
+                .map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${m.content.slice(0, 500)}`)
+                .join('\n');
+
+            // Construct Prompt with Intent Hint
+            const sourceInfo = {
+                combined: '以下是通过知识库搜索和用户添加的参考文档：',
+                semantic: '以下是通过知识库语义搜索找到的相关内容：',
+                manual: '以下是用户手动添加的参考文档：',
+                none: '（未找到相关知识库内容，将基于通用知识回答）'
+            };
+
+            const intentHint = intentResult.hint ? `\n回答风格提示: ${intentResult.hint}` : '';
+
+            const prompt = `
+You are a helpful AI assistant for a document editor with access to the user's knowledge base.
+You are having a conversation with the user. Here is the recent conversation history:
+
+${recentHistory ? `【对话历史】\n${recentHistory}\n\n` : ''}User's Current Query: "${userMsg.content}"
+
+${sourceInfo[contextSource]}
 ${context}
 
 Instructions:
-1. Answer the user's query based on the provided Context Documents.
-2. If the answer is not in the documents, use your general knowledge but mention that it's not from the context.
-3. Be concise and professional.
+1. Answer the user's query based on the provided context if available.
+2. If the answer comes from the knowledge base, mention which document it's from.
+3. If no context is provided or the answer is not in the context, use your general knowledge but mention "根据通用知识".
+4. Be concise and professional.${intentHint}
+5. Consider the conversation history to provide coherent responses.
+6. 请用中文回复。
 `;
 
-        try {
             let aiResponseText = '';
             const aiMsgId = Date.now() + 1;
 
@@ -81,8 +216,22 @@ Instructions:
                     msg.id === aiMsgId ? { ...msg, content: aiResponseText } : msg
                 ));
             });
+
+            // 添加来源引用（如果有语义搜索结果）
+            if (semanticResults.length > 0) {
+                const sourcesRef = '\n\n---\n📚 **引用来源**: ' +
+                    [...new Set(semanticResults.map(r => r.metadata?.title || '未知'))].join('、');
+                setMessages(prev => prev.map(msg =>
+                    msg.id === aiMsgId ? { ...msg, content: msg.content + sourcesRef } : msg
+                ));
+            }
+
         } catch (error) {
-            setMessages(prev => [...prev, { id: Date.now() + 2, role: 'ai', content: `Error: ${error.message}` }]);
+            console.error('[AI Sidebar] Error:', error);
+            const errorMsg = error.message?.includes('token')
+                ? '文档内容过长，请尝试移除部分知识来源后重试。'
+                : `请求失败: ${error.message}`;
+            setMessages(prev => [...prev, { id: Date.now() + 2, role: 'ai', content: `❌ ${errorMsg}` }]);
         } finally {
             setIsThinking(false);
         }
@@ -123,10 +272,29 @@ Instructions:
                         </div>
                     ))}
                     {sources.length === 0 && (
-                        <span className="text-xs text-gray-400 italic">暂无上下文，请添加文档...</span>
+                        <span className="text-xs text-gray-400 italic">🔍 自动搜索知识库 | 可手动添加文档补充</span>
                     )}
                 </div>
             </div>
+
+            {/* Search Status Bar */}
+            {(isSearching || searchStatus) && (
+                <div className={`px-4 py-2 text-xs border-b transition-all ${isSearching
+                        ? 'bg-blue-50 text-blue-600 border-blue-100'
+                        : searchStatus.includes('✅')
+                            ? 'bg-green-50 text-green-600 border-green-100'
+                            : searchStatus.includes('❌')
+                                ? 'bg-red-50 text-red-600 border-red-100'
+                                : 'bg-gray-50 text-gray-600 border-gray-100'
+                    }`}>
+                    <div className="flex items-center gap-2">
+                        {isSearching && (
+                            <Search size={12} className="animate-pulse" />
+                        )}
+                        <span>{searchStatus}</span>
+                    </div>
+                </div>
+            )}
 
             {/* Chat Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30">

@@ -11,6 +11,7 @@ import CommentSidebar from '@/components/Comments/CommentSidebar';
 import AISidebar from '@/components/AI/AISidebar';
 import MagicCommand from '@/components/AI/MagicCommand';
 import { getTextContent, isPlainText, plainTextToHtml } from '@/lib/editor-utils';
+import { importWordDoc } from '@/lib/utils/ImportHandler';
 import { useDocumentData } from '@/hooks/useDocumentData';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { DOC_STATUS, STATUS_LABELS } from '@/lib/constants';
@@ -342,22 +343,24 @@ export default function EditorPage() {
     };
 
     const handleImport = async (file: File) => {
-        // Simplified import - just read as text for now
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target?.result as string;
+        try {
+            // 使用 mammoth 库正确解析 .docx 文件
+            // importWordDoc 返回 html 字符串
+            const html = await importWordDoc(file) as string;
             if (editorInstance) {
-                editorInstance.commands.setContent(text);
+                editorInstance.commands.setContent(html);
             } else {
-                setContent(text);
+                setContent(html);
             }
             if (!title || !title.trim()) {
                 const fileName = file.name.replace(/\.[^/.]+$/, "");
                 setTitle(fileName);
             }
             alert('导入成功！');
-        };
-        reader.readAsText(file);
+        } catch (error) {
+            console.error('[Import] 导入失败:', error);
+            alert('导入失败，请确保文件是有效的 Word 文档');
+        }
     };
 
     if (!currentUser) {

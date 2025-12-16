@@ -74,11 +74,8 @@ export default function DocToolbar({ editor, onAddComment }) {
     }
 
     // 确保编辑器视图已完全初始化，避免 "The editor view is not available" 错误
-    // 检查条件：
-    // 1. editor.view 存在
-    // 2. editor.view.dom 存在（表示编辑器已挂载到 DOM）
-    // 3. editor 未被销毁
-    if (!editor.view || !editor.view.dom || editor.isDestroyed) {
+    // 优先检查 isDestroyed，因为访问销毁后的 editor.view 可能会抛出错误
+    if (!editor || editor.isDestroyed || !editor.view || !editor.view.dom) {
         return null;
     }
 

@@ -31,6 +31,11 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
+    // 已登录用户访问首页 -> 重定向到 Dashboard
+    if (user && request.nextUrl.pathname === '/') {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
     return response
 }
 

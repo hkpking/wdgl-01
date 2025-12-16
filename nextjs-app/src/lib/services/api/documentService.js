@@ -118,6 +118,71 @@ export async function saveDocument(userId, docId, docData) {
         result = data;
     }
 
+    // 异步生成 embedding (不阻塞保存返回)
+    // 只有当有内容时才生成
+    if (docData.content?.trim()) {
+        // 提取纯文本以减小 payload (去除 HTML 标签和 base64 图片)
+        const plainText = docData.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+        // 确保使用正确的标题：检查是否为有效的非空字符串
+        // 优先级：docData.title > result.title > 默认值
+        const docTitle = (docData.title && docData.title.trim())
+            ? docData.title.trim()
+            : (result.title && result.title.trim())
+                ? result.title.trim()
+                : '无标题文档';
+
+        console.log(`[AutoEmbedding] Title debug: docData.title="${docData.title}", result.title="${result.title}", final="${docTitle}"`);
+
+        if (plainText) {
+            // 带重试机制的 embedding 生成
+            const generateEmbeddingWithRetry = async (retries = 3, delay = 2000) => {
+                for (let attempt = 1; attempt <= retries; attempt++) {
+                    try {
+                        console.log(`[AutoEmbedding] Attempt ${attempt}/${retries} for doc: ${docTitle} (${plainText.length} chars)`);
+
+                        const response = await fetch('/api/embeddings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                documentId: result.id,
+                                userId,
+                                content: plainText,
+                                title: docTitle
+                            })
+                        });
+
+                        if (response.ok) {
+                            const resData = await response.json();
+                            console.log(`[AutoEmbedding] ✅ Success: ${resData.chunksCreated} chunks created`);
+                            return resData;
+                        }
+
+                        // 非成功响应
+                        const errorText = await response.text();
+                        console.error(`[AutoEmbedding] ❌ Attempt ${attempt} failed: ${response.status} - ${errorText}`);
+
+                        if (attempt < retries) {
+                            console.log(`[AutoEmbedding] Retrying in ${delay / 1000}s...`);
+                            await new Promise(r => setTimeout(r, delay));
+                        }
+                    } catch (err) {
+                        console.error(`[AutoEmbedding] ❌ Attempt ${attempt} error:`, err);
+                        if (attempt < retries) {
+                            await new Promise(r => setTimeout(r, delay));
+                        }
+                    }
+                }
+                console.error('[AutoEmbedding] ❌ All retries failed for doc:', result.id);
+                return null;
+            };
+
+            // 异步执行，不阻塞主流程
+            generateEmbeddingWithRetry();
+        }
+    }
+
+
     return {
         id: result.id,
         title: result.title,
