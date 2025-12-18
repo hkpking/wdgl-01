@@ -61,7 +61,7 @@ export default function KnowledgeBaseSelector({
         if (teams.length > 0) return; // 已加载
         setLoadingTeams(true);
         try {
-            const userTeams = await teamService.getUserTeams(userId);
+            const userTeams = await teamService.getVisibleTeams(userId);
             setTeams(userTeams);
         } catch (error) {
             console.error('加载团队失败:', error);

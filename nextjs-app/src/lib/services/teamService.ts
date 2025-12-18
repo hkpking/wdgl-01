@@ -35,6 +35,59 @@ export async function getUserTeams(userId: string): Promise<Team[]> {
 }
 
 /**
+ * 获取用户可见的所有团队
+ * - public 团队：所有登录用户可见
+ * - team/private 团队：仅成员可见
+ */
+export async function getVisibleTeams(userId: string): Promise<Team[]> {
+    // 1. 获取所有公开团队
+    const { data: publicTeams, error: publicError } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('visibility', 'public')
+        .order('created_at', { ascending: false });
+
+    if (publicError) {
+        console.error('[teamService] 获取公开团队失败:', publicError);
+    }
+
+    // 2. 获取用户是成员的团队（包括非公开）
+    const { data: memberTeams, error: memberError } = await supabase
+        .from('teams')
+        .select(`
+            *,
+            team_members!inner(user_id, role)
+        `)
+        .eq('team_members.user_id', userId)
+        .order('created_at', { ascending: false });
+
+    if (memberError) {
+        console.error('[teamService] 获取成员团队失败:', memberError);
+    }
+
+    // 3. 合并并去重
+    const teamMap = new Map<string, any>();
+
+    // 先添加成员团队（优先级更高，因为用户是成员）
+    for (const team of memberTeams || []) {
+        teamMap.set(team.id, team);
+    }
+
+    // 再添加公开团队（不覆盖已存在的）
+    for (const team of publicTeams || []) {
+        if (!teamMap.has(team.id)) {
+            teamMap.set(team.id, team);
+        }
+    }
+
+    // 按创建时间排序
+    const allTeams = Array.from(teamMap.values())
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    return allTeams.map(transformTeam);
+}
+
+/**
  * 获取团队详情
  */
 export async function getTeam(teamId: string): Promise<Team | null> {

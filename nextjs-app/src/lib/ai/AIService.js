@@ -69,7 +69,7 @@ class AIService {
                     prompt: prompt,
                     provider: this.provider,
                     model: this.modelName,
-                    apiKey: this.apiKey // Optional, backend will use env key if missing
+                    ...(this.apiKey && { apiKey: this.apiKey }) // 只有 apiKey 非空时才传递，否则后端使用环境变量
                 })
             });
 
@@ -105,7 +105,7 @@ class AIService {
                     prompt: prompt,
                     provider: this.provider,
                     model: this.modelName,
-                    apiKey: this.apiKey
+                    ...(this.apiKey && { apiKey: this.apiKey }) // 只有 apiKey 非空时才传递
                 })
             });
 
@@ -213,7 +213,7 @@ class AIService {
                     prompt: prompt,
                     provider: this.provider,
                     model: this.modelName,
-                    apiKey: this.apiKey
+                    ...(this.apiKey && { apiKey: this.apiKey }) // 只有 apiKey 非空时才传递
                 })
             });
 
@@ -252,7 +252,7 @@ class AIService {
                     prompt: prompt,
                     provider: this.provider,
                     model: this.modelName,
-                    apiKey: this.apiKey
+                    ...(this.apiKey && { apiKey: this.apiKey }) // 只有 apiKey 非空时才传递
                 })
             });
 

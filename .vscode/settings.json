@@ -1,4 +1,42 @@
 {
     "remote.autoForwardPortsFallback": 0,
-    "css.lint.unknownAtRules": "ignore"
+    "css.lint.unknownAtRules": "ignore",
+    
+    // ========== 文件监视优化 ==========
+    "files.watcherExclude": {
+        "**/node_modules/**": true,
+        "**/.next/**": true,
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/dist/**": true,
+        "**/.tmp.driveupload/**": true
+    },
+    
+    // ========== 搜索排除 ==========
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/.next": true,
+        "**/dist": true,
+        "**/*.lock": true,
+        "**/package-lock.json": true
+    },
+    
+    // ========== TypeScript 优化 ==========
+    "typescript.tsserver.maxTsServerMemory": 2048,
+    "typescript.disableAutomaticTypeAcquisition": true,
+    "typescript.preferences.includePackageJsonAutoImports": "off",
+    
+    // ========== 编辑器优化 ==========
+    "editor.quickSuggestions": {
+        "strings": false
+    },
+    "editor.wordBasedSuggestions": "off",
+    "editor.suggestSelection": "first",
+    
+    // ========== 文件关联优化 ==========
+    "files.exclude": {
+        "**/node_modules": true,
+        "**/.next": true,
+        "**/.git": true
+    }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 // 对话消息接口
 export interface Message {
@@ -43,6 +43,14 @@ export function useConversationHistory(userId?: string) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    // 使用 ref 跟踪最新的 currentConversationId，避免闭包问题
+    const currentConversationIdRef = useRef<string | null>(null);
+
+    // 同步 ref 与 state
+    useEffect(() => {
+        currentConversationIdRef.current = currentConversationId;
+    }, [currentConversationId]);
 
     // 获取存储 key（按用户隔离）
     const getStorageKey = useCallback(() => {
@@ -106,6 +114,7 @@ export function useConversationHistory(userId?: string) {
     const currentConversation = conversations.find(c => c.id === currentConversationId) || null;
 
     // 添加消息到当前对话
+    // 使用 ref 来获取最新的 conversationId，避免 stale closure
     const addMessage = useCallback((message: Omit<Message, 'id' | 'timestamp'>) => {
         const newMessage: Message = {
             ...message,
@@ -113,29 +122,36 @@ export function useConversationHistory(userId?: string) {
             timestamp: Date.now()
         };
 
+        // 使用 ref 获取最新的 conversationId
+        const convId = currentConversationIdRef.current;
+
         // 如果没有当前对话，同步创建并添加消息
-        if (!currentConversationId) {
+        if (!convId) {
+            const newConvId = `conv_${Date.now()}`;
             const newConv: Conversation = {
-                id: `conv_${Date.now()}`,
+                id: newConvId,
                 title: message.role === 'user' ? message.content.substring(0, 30) : '新对话',
                 messages: [newMessage],
                 createdAt: Date.now(),
                 updatedAt: Date.now()
             };
 
+            // 立即更新 ref，让后续的 addMessage 调用能看到新的 ID
+            currentConversationIdRef.current = newConvId;
+
             setConversations(prev => {
                 const updated = [newConv, ...prev];
                 saveToStorage(updated);
                 return updated;
             });
-            setCurrentConversationId(newConv.id);
+            setCurrentConversationId(newConvId);
             return newMessage;
         }
 
         // 已有对话，正常添加消息
         setConversations(prev => {
             const updated = prev.map(conv => {
-                if (conv.id === currentConversationId) {
+                if (conv.id === convId) {
                     // 如果是第一条用户消息，更新对话标题
                     const shouldUpdateTitle = conv.messages.length === 0 && message.role === 'user';
                     return {
@@ -149,7 +165,7 @@ export function useConversationHistory(userId?: string) {
             });
 
             // 把当前对话移到最前面
-            const currentIndex = updated.findIndex(c => c.id === currentConversationId);
+            const currentIndex = updated.findIndex(c => c.id === convId);
             if (currentIndex > 0) {
                 const [current] = updated.splice(currentIndex, 1);
                 updated.unshift(current);
@@ -160,13 +176,17 @@ export function useConversationHistory(userId?: string) {
         });
 
         return newMessage;
-    }, [currentConversationId, saveToStorage]);
+    }, [saveToStorage]);
 
     // 更新消息（用于流式更新 AI 回复）
+    // 注意：不再依赖 currentConversationId，而是根据 messageId 在所有对话中查找
+    // 这样可以避免首次发送消息时的 stale closure 问题
     const updateMessage = useCallback((messageId: string, updates: Partial<Message>) => {
         setConversations(prev => {
             const updated = prev.map(conv => {
-                if (conv.id === currentConversationId) {
+                // 检查这个对话是否包含要更新的消息
+                const hasMessage = conv.messages.some(msg => msg.id === messageId);
+                if (hasMessage) {
                     return {
                         ...conv,
                         messages: conv.messages.map(msg =>
@@ -180,7 +200,7 @@ export function useConversationHistory(userId?: string) {
             saveToStorage(updated);
             return updated;
         });
-    }, [currentConversationId, saveToStorage]);
+    }, [saveToStorage]);
 
     // 切换对话
     const switchConversation = useCallback((conversationId: string) => {

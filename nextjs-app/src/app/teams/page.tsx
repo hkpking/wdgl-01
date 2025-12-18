@@ -29,7 +29,7 @@ export default function TeamsPage() {
         if (!currentUser?.uid) return;
         setLoading(true);
         try {
-            const data = await teamService.getUserTeams(currentUser.uid);
+            const data = await teamService.getVisibleTeams(currentUser.uid);
             setTeams(data);
         } catch (error) {
             console.error('加载团队列表失败:', error);

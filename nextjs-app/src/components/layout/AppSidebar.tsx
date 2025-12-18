@@ -112,7 +112,7 @@ export default function AppSidebar({
         if (!currentUser?.uid) return;
         setLoadingTeams(true);
         try {
-            const data = await teamService.getUserTeams(currentUser.uid);
+            const data = await teamService.getVisibleTeams(currentUser.uid);
             setTeams(data);
         } catch (error) {
             console.error('加载团队失败:', error);
