@@ -13,7 +13,10 @@ import { semanticCache } from '@/lib/ai/semanticCache';
  * - 缓存失效：更新索引时自动清理语义缓存
  */
 
-const SUPABASE_URL = 'https://nwyvgeoeqkoupqwjsghk.supabase.co';
+const SUPABASE_DIRECT_URL = 'https://nwyvgeoeqkoupqwjsghk.supabase.co';
+const SUPABASE_PROXY_URL = 'https://46.3.39.75:8443';
+const useProxy = process.env.USE_SUPABASE_PROXY === 'true';
+const SUPABASE_URL = useProxy ? SUPABASE_PROXY_URL : SUPABASE_DIRECT_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 // 创建 Supabase 服务端客户端
