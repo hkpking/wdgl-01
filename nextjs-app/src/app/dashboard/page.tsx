@@ -1,19 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, LogOut, FileText, FolderPlus, Edit2, Trash2, LayoutGrid, List as ListIcon } from 'lucide-react';
+import { Plus, Search, LogOut, FileText, FolderPlus, Edit2, Trash2, LayoutGrid, List as ListIcon, Sparkles, Filter, X } from 'lucide-react';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, closestCenter } from '@dnd-kit/core';
+import { useDebounce } from '@/hooks/useDebounce';
 import DocumentList from '@/components/DocumentList';
 import FolderTree from '@/components/FolderTree';
 import FolderSelector from '@/components/FolderSelector';
 import Breadcrumbs from '@/components/Breadcrumbs';
+import AppSidebar from '@/components/layout/AppSidebar';
+import SearchModal from '@/components/shared/SearchModal';
 import { useFolderManager } from '@/hooks/useFolderManager';
+import { useGlobalSearch } from '@/hooks/useGlobalSearch';
 import { DOC_STATUS } from '@/lib/constants';
 import { useStorage } from '@/contexts/StorageContext';
 import type { Document, DocumentStatus } from '@/types/storage';
 import { CreateFolderModal, RenameFolderModal, DeleteConfirmModal } from '@/components/modals';
 import { Loader2 } from 'lucide-react';
+import SearchFilterPanel from '@/components/SearchFilterPanel';
 
 export default function Dashboard() {
     const router = useRouter();
@@ -33,6 +38,9 @@ export default function Dashboard() {
         openCreateModal, openRenameModal, setFolderToDelete
     } = folderManager as any;
 
+    // 全局搜索
+    const { isOpen: isSearchOpen, openSearch, closeSearch } = useGlobalSearch();
+
     // Document State
     const [documents, setDocuments] = useState<Document[]>([]);
     const [loading, setLoading] = useState(true);
@@ -40,6 +48,23 @@ export default function Dashboard() {
     const [filterStatus, setFilterStatus] = useState('all');
     const [sortBy, setSortBy] = useState('updatedAt');
     const [viewMode, setViewMode] = useState('grid');
+
+    // 语义搜索状态
+    const [isSemanticSearching, setIsSemanticSearching] = useState(false);
+    const [semanticResults, setSemanticResults] = useState<Document[]>([]);
+    const [searchMode, setSearchMode] = useState<'local' | 'semantic'>('local');
+    const [searchHint, setSearchHint] = useState('');
+    const debouncedSearchTerm = useDebounce(searchTerm, 400);
+
+    // 高级筛选状态
+    const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+    const [advancedFilters, setAdvancedFilters] = useState({
+        documentType: '',
+        dateRange: '',
+        department: '',
+        status: '',
+    });
+    const hasActiveFilters = advancedFilters.documentType || advancedFilters.dateRange || advancedFilters.department || advancedFilters.status;
 
     // Document Actions State
     const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
@@ -159,22 +184,93 @@ export default function Dashboard() {
         }
     };
 
+    // --- 语义搜索 Effect ---
+    useEffect(() => {
+        // 只有搜索词超过 2 个字符才触发语义搜索
+        if (debouncedSearchTerm.length > 2 && searchMode === 'semantic') {
+            setIsSemanticSearching(true);
+            setSearchHint('正在进行智能搜索...');
+
+            fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: debouncedSearchTerm,
+                    userId: currentUser?.uid,
+                    topK: 20,
+                    enableRerank: true,
+                    enableKnowledgeGraph: true,
+                    filters: hasActiveFilters ? {
+                        documentType: advancedFilters.documentType || undefined,
+                        dateRange: advancedFilters.dateRange ? { range: advancedFilters.dateRange } : undefined,
+                        department: advancedFilters.department || undefined,
+                        status: advancedFilters.status || undefined,
+                    } : undefined
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.results && data.results.length > 0) {
+                        // 将搜索结果转换为文档格式
+                        const resultDocs = data.results.map((r: any) => ({
+                            id: r.document_id,
+                            title: r.metadata?.title || '未知标题',
+                            content: r.chunk_text,
+                            status: r.metadata?.status || DOC_STATUS.DRAFT,
+                            parentId: r.metadata?.folder_id || null,
+                            updatedAt: r.metadata?.updated_at,
+                            createdAt: r.metadata?.created_at,
+                            _score: r.rerankScore || r.hybridScore || r.similarity,
+                            _highlight: r.chunk_text?.substring(0, 150)
+                        }));
+                        setSemanticResults(resultDocs);
+                        setSearchHint(`找到 ${resultDocs.length} 个相关结果 (${data.timeMs}ms)`);
+                    } else {
+                        setSemanticResults([]);
+                        setSearchHint('未找到相关内容，尝试换个关键词');
+                    }
+                })
+                .catch(err => {
+                    console.error('语义搜索失败:', err);
+                    setSearchHint('搜索出错，已切换到本地搜索');
+                    setSearchMode('local');
+                })
+                .finally(() => setIsSemanticSearching(false));
+        } else if (debouncedSearchTerm.length <= 2) {
+            setSemanticResults([]);
+            setSearchHint('');
+        }
+    }, [debouncedSearchTerm, searchMode, currentUser?.uid]);
+
     // --- Filter Logic ---
-    const filteredDocs = documents
-        .filter(doc => {
-            const matchesSearch = (doc.title || '无标题').toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesStatus = filterStatus === 'all' || (doc.status || DOC_STATUS.DRAFT) === filterStatus;
-            const matchesFolder = selectedFolderId ? doc.parentId === selectedFolderId : true;
-            return matchesSearch && matchesStatus && matchesFolder;
-        })
-        .sort((a, b) => {
-            if (sortBy === 'title') {
-                return (a.title || '').localeCompare(b.title || '');
-            }
-            const timeA = a[sortBy] ? new Date(a[sortBy] as string).getTime() : 0;
-            const timeB = b[sortBy] ? new Date(b[sortBy] as string).getTime() : 0;
-            return timeB - timeA;
-        });
+    const filteredDocs = useMemo(() => {
+        // 如果使用语义搜索且有结果，优先显示语义搜索结果
+        if (searchMode === 'semantic' && semanticResults.length > 0 && debouncedSearchTerm.length > 2) {
+            return semanticResults
+                .filter(doc => {
+                    const matchesStatus = filterStatus === 'all' || (doc.status || DOC_STATUS.DRAFT) === filterStatus;
+                    const matchesFolder = selectedFolderId ? doc.parentId === selectedFolderId : true;
+                    return matchesStatus && matchesFolder;
+                });
+        }
+
+        // 否则使用本地搜索
+        return documents
+            .filter(doc => {
+                const matchesSearch = searchTerm.length === 0 || (doc.title || '无标题').toLowerCase().includes(searchTerm.toLowerCase());
+                const matchesStatus = filterStatus === 'all' || (doc.status || DOC_STATUS.DRAFT) === filterStatus;
+                const matchesFolder = selectedFolderId ? doc.parentId === selectedFolderId : true;
+                return matchesSearch && matchesStatus && matchesFolder;
+            })
+            .sort((a, b) => {
+                if (sortBy === 'title') {
+                    return (a.title || '').localeCompare(b.title || '');
+                }
+                const timeA = a[sortBy] ? new Date(a[sortBy] as string).getTime() : 0;
+                const timeB = b[sortBy] ? new Date(b[sortBy] as string).getTime() : 0;
+                return timeB - timeA;
+            });
+    }, [documents, semanticResults, searchTerm, debouncedSearchTerm, searchMode, filterStatus, selectedFolderId, sortBy]);
 
     const currentFolder = folders.find((f: any) => f.id === selectedFolderId);
     const currentFolderName = selectedFolderId ? currentFolder?.name : '全部文档';
@@ -230,44 +326,22 @@ export default function Dashboard() {
 
     return (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="min-h-screen bg-gray-100 flex flex-col">
-                {/* Header */}
-                <header className="bg-white shadow-sm z-10">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-blue-600 p-1.5 rounded-lg">
-                                <FileText className="text-white" size={20} />
-                            </div>
-                            <h1 className="text-xl font-bold text-gray-900">制度管理系统</h1>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <span className="text-sm text-gray-500">{currentUser?.email || '演示模式'}</span>
-                            <button onClick={handleLogout} className="text-gray-500 hover:text-gray-800"><LogOut size={18} /></button>
-                        </div>
-                    </div>
-                </header>
+            <div className="min-h-screen bg-gray-50 flex">
+                {/* 左侧导航 */}
+                <AppSidebar
+                    currentUser={currentUser}
+                    onLogout={handleLogout}
+                    onCreateDoc={handleCreateDoc}
+                    onUpload={() => alert('上传功能开发中...')}
+                    folders={folders}
+                    selectedFolderId={selectedFolderId}
+                    onSelectFolder={setSelectedFolderId}
+                    onOpenSearch={openSearch}
+                />
 
-                <div className="flex flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 gap-6">
-                    {/* Sidebar */}
-                    <aside className="w-64 bg-white rounded-lg shadow-sm flex flex-col h-[calc(100vh-8rem)] sticky top-24">
-                        <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                            <h2 className="font-semibold text-gray-700">目录导航</h2>
-                            <button onClick={() => openCreateModal(null)} className="p-1 hover:bg-gray-100 rounded text-blue-600" title="新建文件夹">
-                                <FolderPlus size={18} />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                            <FolderTree
-                                folders={folders}
-                                selectedFolderId={selectedFolderId}
-                                onSelectFolder={setSelectedFolderId}
-                                onAction={handleFolderContextMenu}
-                            />
-                        </div>
-                    </aside>
-
-                    {/* Main Content */}
-                    <main className="flex-1 bg-white rounded-lg shadow-sm p-6 min-h-[calc(100vh-8rem)]">
+                {/* 主内容区域 */}
+                <main className="flex-1 p-8 overflow-y-auto">
+                    <div className="max-w-6xl mx-auto">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                 {currentFolderName}
@@ -283,16 +357,52 @@ export default function Dashboard() {
                         {/* Toolbar */}
                         <div className="flex flex-wrap gap-4 mb-6">
                             <div className="relative flex-1 min-w-[200px]">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                                {isSemanticSearching ? (
+                                    <Loader2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-500 animate-spin" size={18} />
+                                ) : searchMode === 'semantic' ? (
+                                    <Sparkles className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-500" size={18} />
+                                ) : (
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                                )}
                                 <input
                                     type="text"
-                                    placeholder="搜索当前目录..."
-                                    className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                    placeholder={searchMode === 'semantic' ? "智能搜索文档内容..." : "搜索文档标题..."}
+                                    className={`w-full pl-10 pr-20 py-2 border rounded-lg focus:outline-none focus:ring-2 text-sm ${searchMode === 'semantic'
+                                        ? 'bg-purple-50 border-purple-200 focus:ring-purple-500'
+                                        : 'bg-gray-50 border-gray-200 focus:ring-blue-500'
+                                        }`}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
+                                {/* 搜索模式切换按钮 */}
+                                <button
+                                    onClick={() => setSearchMode(searchMode === 'local' ? 'semantic' : 'local')}
+                                    className={`absolute right-2 top-1/2 transform -translate-y-1/2 px-2 py-1 rounded text-xs font-medium transition-all ${searchMode === 'semantic'
+                                        ? 'bg-purple-500 text-white hover:bg-purple-600'
+                                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                        }`}
+                                    title={searchMode === 'semantic' ? '切换到本地搜索' : '切换到智能搜索'}
+                                >
+                                    {searchMode === 'semantic' ? '✨ 智能' : '📂 本地'}
+                                </button>
                             </div>
                             <div className="flex items-center gap-2">
+                                {/* 高级筛选按钮 */}
+                                <button
+                                    onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)}
+                                    className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${isFilterPanelOpen || hasActiveFilters
+                                        ? 'bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100'
+                                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                                        }`}
+                                >
+                                    <Filter size={16} />
+                                    筛选
+                                    {hasActiveFilters && (
+                                        <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-purple-500 text-white text-xs rounded-full flex items-center justify-center">
+                                            {[advancedFilters.documentType, advancedFilters.dateRange, advancedFilters.department, advancedFilters.status].filter(Boolean).length}
+                                        </span>
+                                    )}
+                                </button>
                                 <select
                                     value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
                                     className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2"
@@ -309,6 +419,38 @@ export default function Dashboard() {
                             </div>
                         </div>
 
+                        {/* 高级筛选面板 */}
+                        <SearchFilterPanel
+                            isOpen={isFilterPanelOpen}
+                            onClose={() => setIsFilterPanelOpen(false)}
+                            filters={advancedFilters}
+                            onFiltersChange={setAdvancedFilters}
+                        />
+
+                        {/* 搜索提示 */}
+                        {searchHint && (
+                            <div className={`mb-4 px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${searchHint.includes('找到')
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : searchHint.includes('出错')
+                                    ? 'bg-red-50 text-red-700 border border-red-200'
+                                    : 'bg-purple-50 text-purple-700 border border-purple-200'
+                                }`}>
+                                {isSemanticSearching ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                ) : searchHint.includes('找到') ? (
+                                    <Sparkles size={14} />
+                                ) : (
+                                    <Search size={14} />
+                                )}
+                                {searchHint}
+                                {searchHint && !isSemanticSearching && (
+                                    <button onClick={() => setSearchHint('')} className="ml-auto hover:bg-white/50 rounded p-0.5">
+                                        <X size={14} />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
                         {/* Document List */}
                         {loading ? (
                             <div className="text-center py-20 text-gray-400">加载中...</div>
@@ -322,8 +464,8 @@ export default function Dashboard() {
                                 onMove={setMoveDocId}
                             />
                         )}
-                    </main>
-                </div>
+                    </div>
+                </main>
 
                 {/* Modals */}
                 {folderMenu && (
@@ -379,6 +521,15 @@ export default function Dashboard() {
                     ) : null}
                 </DragOverlay>
             </div>
+
+            {/* 全局搜索弹窗 */}
+            <SearchModal
+                isOpen={isSearchOpen}
+                onClose={closeSearch}
+                userId={currentUser.uid}
+                folderId={selectedFolderId}
+                searchScope={selectedFolderId ? 'folder' : 'all'}
+            />
         </DndContext>
     );
 }

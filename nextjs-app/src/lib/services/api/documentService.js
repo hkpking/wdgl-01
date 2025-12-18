@@ -21,13 +21,14 @@ const getCurrentUserId = async () => {
 // ============================================
 
 /**
- * 获取用户所有文档
+ * 获取用户所有个人文档（不包含知识库文档）
  */
 export async function getAllDocuments(userId) {
     const { data, error } = await supabase
         .from('documents')
         .select('*')
         .eq('user_id', userId)
+        .is('knowledge_base_id', null)  // 只获取个人文档
         .order('updated_at', { ascending: false });
 
     if (error) {
@@ -42,6 +43,36 @@ export async function getAllDocuments(userId) {
         content: doc.content,
         status: doc.status,
         folderId: doc.folder_id,
+        knowledgeBaseId: doc.knowledge_base_id,
+        teamId: doc.team_id,
+        createdAt: doc.created_at,
+        updatedAt: doc.updated_at,
+    }));
+}
+
+/**
+ * 获取知识库的所有文档
+ */
+export async function getKBDocuments(knowledgeBaseId) {
+    const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('knowledge_base_id', knowledgeBaseId)
+        .order('updated_at', { ascending: false });
+
+    if (error) {
+        console.error('获取知识库文档失败:', error);
+        return [];
+    }
+
+    return data.map(doc => ({
+        id: doc.id,
+        title: doc.title,
+        content: doc.content,
+        status: doc.status,
+        folderId: doc.folder_id,
+        knowledgeBaseId: doc.knowledge_base_id,
+        teamId: doc.team_id,
         createdAt: doc.created_at,
         updatedAt: doc.updated_at,
     }));
@@ -83,6 +114,8 @@ export async function saveDocument(userId, docId, docData) {
         content: docData.content,
         status: docData.status || 'draft',
         folder_id: docData.folderId || null,
+        knowledge_base_id: docData.knowledgeBaseId || null,
+        team_id: docData.teamId || null,
         user_id: userId,
     };
 
@@ -189,6 +222,8 @@ export async function saveDocument(userId, docId, docData) {
         content: result.content,
         status: result.status,
         folderId: result.folder_id,
+        knowledgeBaseId: result.knowledge_base_id,
+        teamId: result.team_id,
         createdAt: result.created_at,
         updatedAt: result.updated_at,
     };

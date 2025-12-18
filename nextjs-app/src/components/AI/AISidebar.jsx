@@ -22,7 +22,7 @@ function classifyIntentClient(query) {
     return { intent: 'document_qa', hint: '' };
 }
 
-export default function AISidebar({ currentUser, currentDoc, onClose, embedded = false }) {
+export default function AISidebar({ currentUser, currentDoc, onClose, embedded = false, teamId, knowledgeBaseId, searchScope = 'all' }) {
     const [messages, setMessages] = useState([
         { id: 'welcome', role: 'ai', content: '你好！我是您的 AI 助手。我可以帮您总结文档、回答问题，或查询您的知识库。\n\n💡 **提示**: 我会自动搜索您已保存的文档来回答问题，支持多轮对话记忆。' }
     ]);
@@ -99,6 +99,8 @@ export default function AISidebar({ currentUser, currentDoc, onClose, embedded =
                         body: JSON.stringify({
                             query: userMsg.content,
                             userId: currentUser.uid,
+                            teamId: searchScope === 'team' ? teamId : undefined,
+                            knowledgeBaseId: searchScope === 'knowledgeBase' ? knowledgeBaseId : undefined,
                             topK: 5,
                             threshold: 0.3,
                             enableRerank: true,
@@ -280,12 +282,12 @@ Instructions:
             {/* Search Status Bar */}
             {(isSearching || searchStatus) && (
                 <div className={`px-4 py-2 text-xs border-b transition-all ${isSearching
-                        ? 'bg-blue-50 text-blue-600 border-blue-100'
-                        : searchStatus.includes('✅')
-                            ? 'bg-green-50 text-green-600 border-green-100'
-                            : searchStatus.includes('❌')
-                                ? 'bg-red-50 text-red-600 border-red-100'
-                                : 'bg-gray-50 text-gray-600 border-gray-100'
+                    ? 'bg-blue-50 text-blue-600 border-blue-100'
+                    : searchStatus.includes('✅')
+                        ? 'bg-green-50 text-green-600 border-green-100'
+                        : searchStatus.includes('❌')
+                            ? 'bg-red-50 text-red-600 border-red-100'
+                            : 'bg-gray-50 text-gray-600 border-gray-100'
                     }`}>
                     <div className="flex items-center gap-2">
                         {isSearching && (

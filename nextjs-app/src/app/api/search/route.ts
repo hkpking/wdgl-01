@@ -84,8 +84,11 @@ export async function POST(req: NextRequest) {
             threshold = 0.1,
             enableRerank = true,
             enableCache = true,
-            filters: explicitFilters,      // 显式过滤条件
-            enableKnowledgeGraph = false   // 是否启用知识图谱增强
+            filters: explicitFilters,
+            enableKnowledgeGraph = false,
+            teamId,           // 团队过滤
+            knowledgeBaseId,  // 知识库过滤
+            documentId        // 文档过滤
         } = await req.json() as {
             query: string;
             userId?: string;
@@ -95,6 +98,9 @@ export async function POST(req: NextRequest) {
             enableCache?: boolean;
             filters?: SearchFilters;
             enableKnowledgeGraph?: boolean;
+            teamId?: string;
+            knowledgeBaseId?: string;
+            documentId?: string;
         };
 
         if (!query) {
@@ -194,10 +200,36 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 6. 按文档去重（同一文档只保留最相关的 chunk）
+        // 6. 按团队/知识库/文档过滤（如果指定）
+        let filteredResults = rerankedResults;
+        if (documentId) {
+            // 直接按文档 ID 过滤
+            filteredResults = rerankedResults.filter((r: any) => r.document_id === documentId);
+        } else if (teamId || knowledgeBaseId) {
+            // 需要查询 documents 表获取关联信息
+            const docIds = [...new Set(rerankedResults.map((r: any) => r.document_id))];
+            if (docIds.length > 0) {
+                const { data: docs } = await supabase
+                    .from('documents')
+                    .select('id, team_id, knowledge_base_id')
+                    .in('id', docIds);
+
+                const docMap = new Map((docs || []).map((d: any) => [d.id, d]));
+
+                filteredResults = rerankedResults.filter((r: any) => {
+                    const doc = docMap.get(r.document_id);
+                    if (!doc) return false;
+                    if (knowledgeBaseId && doc.knowledge_base_id !== knowledgeBaseId) return false;
+                    if (teamId && doc.team_id !== teamId) return false;
+                    return true;
+                });
+            }
+        }
+
+        // 7. 按文档去重（同一文档只保留最相关的 chunk）
         const seenDocs = new Set();
         const dedupedResults: any[] = [];
-        for (const r of rerankedResults) {
+        for (const r of filteredResults) {
             if (!seenDocs.has(r.document_id)) {
                 seenDocs.add(r.document_id);
                 dedupedResults.push(r);
@@ -221,12 +253,53 @@ export async function POST(req: NextRequest) {
             semanticCache.set(queryEmbedding, query, dedupedResults);
         }
 
+        // 8. 为每个结果添加匹配原因解释
+        const resultsWithExplanation = dedupedResults.map((r: any) => {
+            const reasons: string[] = [];
+
+            // 添加分数来源说明
+            if (r.rerankScore !== undefined && r.rerankScore > 0.7) {
+                reasons.push('语义高度相关');
+            } else if (r.similarity > 0.5) {
+                reasons.push('内容相似');
+            }
+
+            if (r.keywordBoost > 0.3) {
+                reasons.push('关键词匹配');
+            }
+
+            return {
+                ...r,
+                matchReason: reasons.length > 0 ? reasons.join('、') : '综合匹配'
+            };
+        });
+
+        // 构建过滤条件提示
+        const filterHints: string[] = [];
+        if (mergedFilters.documentType) {
+            filterHints.push(`类型:${mergedFilters.documentType}`);
+        }
+        if (mergedFilters.dateRange) {
+            filterHints.push('时间筛选');
+        }
+        if (mergedFilters.department) {
+            filterHints.push(`部门:${mergedFilters.department}`);
+        }
+
         return Response.json({
-            results: dedupedResults,
+            results: resultsWithExplanation,
             query: query.substring(0, 100),
             cached: false,
             reranked: enableRerank,
-            timeMs
+            timeMs,
+            // 新增：搜索智能提示
+            searchInsights: {
+                appliedFilters: filterHints.length > 0 ? filterHints : null,
+                knowledgeGraphUsed: enableKnowledgeGraph && knowledgeRelatedDocs.length > 0,
+                expandedQuery: enableKnowledgeGraph && enhancedQuery !== query ? enhancedQuery : null,
+                totalCandidates: data.length,
+                rerankApplied: enableRerank && results.length > 2
+            }
         });
 
     } catch (error) {
