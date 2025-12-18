@@ -1,0 +1,79 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+jobs:
+  # 质量检查
+  quality-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./nextjs-app
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './nextjs-app/package-lock.json'
+      
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+      
+      - name: TypeScript check
+        run: npx tsc --noEmit
+      
+      - name: Lint check
+        run: npm run lint
+        continue-on-error: true  # ESLint 警告不阻止部署
+
+  # 部署到阿里云
+  deploy:
+    needs: quality-check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Deploy to Aliyun Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ALIYUN_HOST }}
+          username: root
+          key: ${{ secrets.ALIYUN_SSH_KEY }}
+          port: 22
+          script: |
+            echo "===== 开始部署 ====="
+            cd /var/www/wdgl-01
+            
+            # 拉取最新代码
+            echo "[1/4] 拉取代码..."
+            git pull origin main
+            
+            # 安装依赖
+            echo "[2/4] 安装依赖..."
+            cd nextjs-app
+            npm install --legacy-peer-deps
+            
+            # 构建
+            echo "[3/4] 构建生产版本..."
+            npm run build
+            
+            # 重启服务
+            echo "[4/4] 重启 PM2 服务..."
+            pm2 restart wdgl-nextjs
+            pm2 restart wdgl-collab
+            
+            echo "===== 部署完成 ====="
+            pm2 list
+
+      - name: Notify Success
+        if: success()
+        run: echo "🚀 部署成功！访问 https://bpm-auto.com"
+
+      - name: Notify Failure
+        if: failure()
+        run: echo "❌ 部署失败，请检查日志"
