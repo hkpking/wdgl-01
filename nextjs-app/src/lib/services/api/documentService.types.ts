@@ -8,7 +8,7 @@
 // ============================================
 
 /** 文档状态 */
-export type DocumentStatus = 'draft' | 'published' | 'archived';
+export type DocumentStatus = 'draft' | 'review' | 'published' | 'archived';
 
 /** 文档内容类型 */
 export type DocumentContentType = 'html' | 'markdown' | 'json';
@@ -28,6 +28,7 @@ export interface Document {
     teamId?: string | null;
     createdAt: string;
     updatedAt: string;
+    [key: string]: unknown;  // Allow dynamic property access for sorting
 }
 
 /** 文档创建/更新输入 */

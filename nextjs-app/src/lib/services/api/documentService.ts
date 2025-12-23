@@ -7,7 +7,13 @@ import type {
     Document, DocumentInput, DocumentStatus,
     Folder, FolderRow
 } from './documentService.types';
-import type { User } from '@/types/storage';
+import type {
+    User,
+    Comment,
+    CommentReply,
+    DocumentVersion,
+    StorageInfo
+} from '@/types/storage';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 // ============================================
@@ -48,6 +54,9 @@ interface DbVersionRow {
     created_at: string;
 }
 
+/** 评论状态类型 */
+type CommentStatus = 'open' | 'resolved';
+
 /** 数据库评论行类型 */
 interface DbCommentRow {
     id: string;
@@ -55,47 +64,19 @@ interface DbCommentRow {
     parent_id: string | null;
     content: string;
     quote: string | null;
-    status: string;
+    status: CommentStatus;
     author_id: string;
     author_name: string;
     created_at: string;
 }
 
-/** 版本信息 */
-interface DocumentVersion {
-    id: string;
-    documentId: string;
-    title: string;
-    content: string;
-    name: string | null;
-    savedAt: string;
-}
 
-/** 评论信息 */
-interface Comment {
-    id: string;
-    docId: string;
-    content: string;
-    quote?: string | null;
-    status: string;
-    author: { uid: string; name: string };
-    createdAt: string;
-    replies: CommentReply[];
-}
 
-interface CommentReply {
-    id: string;
-    content: string;
-    author: { uid: string; name: string };
-    createdAt: string;
-}
 
-/** 存储信息 */
-interface StorageInfo {
-    used: number;
-    total: number;
-    percentage: number;
-}
+
+
+
+
 
 // ============================================
 // 工具函数
@@ -524,7 +505,7 @@ export async function createFolder(userId: string, name: string, parentId: strin
 /**
  * 更新文件夹
  */
-export async function updateFolder(userId: string, folderId: string, updates: { name?: string; parentId?: string | null }): Promise<{ id: string; name: string; parentId: string | null } | null> {
+export async function updateFolder(userId: string, folderId: string, updates: { name?: string; parentId?: string | null }): Promise<Folder | null> {
     const { data, error } = await supabase
         .from('folders')
         .update({
@@ -545,6 +526,7 @@ export async function updateFolder(userId: string, folderId: string, updates: { 
         id: data.id,
         name: data.name,
         parentId: data.parent_id,
+        createdAt: data.created_at,
     };
 }
 
@@ -624,7 +606,7 @@ export async function getComments(userId: string, docId: string): Promise<Commen
         .order('created_at', { ascending: true });
 
     // 组装评论树
-    return data.map(comment => ({
+    return data.map((comment: DbCommentRow) => ({
         id: comment.id,
         docId: comment.document_id,
         content: comment.content,
@@ -636,8 +618,8 @@ export async function getComments(userId: string, docId: string): Promise<Commen
         },
         createdAt: comment.created_at,
         replies: (replies || [])
-            .filter(r => r.parent_id === comment.id)
-            .map(r => ({
+            .filter((r: DbCommentRow) => r.parent_id === comment.id)
+            .map((r: DbCommentRow) => ({
                 id: r.id,
                 content: r.content,
                 author: {
@@ -855,7 +837,7 @@ export function onAuthStateChange(callback: (user: User | null) => void) {
 /**
  * 搜索文档
  */
-export async function searchDocuments(userId: string, query: string): Promise<Partial<Document>[]> {
+export async function searchDocuments(userId: string, query: string): Promise<Document[]> {
     const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -869,11 +851,15 @@ export async function searchDocuments(userId: string, query: string): Promise<Pa
         return [];
     }
 
-    return data.map(doc => ({
+    return data.map((doc: DbDocumentRow) => ({
         id: doc.id,
         title: doc.title,
         content: doc.content,
-        status: doc.status,
+        status: doc.status as DocumentStatus,
+        folderId: doc.folder_id,
+        knowledgeBaseId: doc.knowledge_base_id,
+        teamId: doc.team_id,
+        createdAt: doc.created_at,
         updatedAt: doc.updated_at,
     }));
 }

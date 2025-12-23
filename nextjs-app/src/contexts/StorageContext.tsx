@@ -69,41 +69,61 @@ export const StorageProvider: React.FC<StorageProviderProps> = ({ children }) =>
     }, []);
 
     // Storage API - 统一使用 Supabase
-    // Note: Using Partial<StorageContextType> to allow for flexibility with the underlying JS service
-    const storage = {
-        // 导出所有 Supabase 服务方法
-        ...supabaseService,
-
+    // 显式声明每个方法以确保类型安全
+    const storage: StorageContextType = {
         // 用户管理
         currentUser,
-        getCurrentUser: () => currentUser,
-        // 绕过模式下强制视为已认证，便于本地/E2E 测试直接进入编辑器
+        loading,
         isAuthenticated: BYPASS_AUTH ? true : !!currentUser,
+        getCurrentUser: () => currentUser,
 
         // 认证方法
-        signIn: async (email: string, password: string): Promise<User> => {
+        signIn: async (email: string, password: string) => {
             const user = await supabaseService.signInWithEmail(email, password);
-            setCurrentUser(user as User);
-            return user as User;
+            setCurrentUser(user);
+            return user;
         },
-
-        signUp: async (email: string, password: string, displayName: string): Promise<User> => {
-            const result = await supabaseService.signUpWithEmail(email, password, displayName);
-            return result as User;
+        signUp: async (email: string, password: string, displayName: string) => {
+            return await supabaseService.signUpWithEmail(email, password, displayName);
         },
-
         signOut: async () => {
             await supabaseService.signOut();
             setCurrentUser(null);
         },
 
-        // 加载状态
-        loading,
+        // 文档方法
+        getAllDocuments: supabaseService.getAllDocuments,
+        getDocument: supabaseService.getDocument,
+        saveDocument: supabaseService.saveDocument,
+        deleteDocument: supabaseService.deleteDocument,
+        moveDocument: supabaseService.moveDocument,
+        searchDocuments: supabaseService.searchDocuments,
 
-        // 兼容性属性 (旧代码可能仍在使用)
+        // 版本方法
+        getVersions: supabaseService.getVersions,
+        saveVersion: supabaseService.saveVersion,
+        updateVersion: supabaseService.updateVersion,
+
+        // 文件夹方法
+        getFolders: supabaseService.getFolders,
+        createFolder: supabaseService.createFolder,
+        updateFolder: supabaseService.updateFolder,
+        deleteFolder: supabaseService.deleteFolder,
+
+        // 评论方法
+        getComments: supabaseService.getComments,
+        addComment: supabaseService.addComment,
+        addReply: supabaseService.addReply,
+        updateCommentStatus: supabaseService.updateCommentStatus,
+        deleteComment: supabaseService.deleteComment,
+
+        // 存储信息
+        getStorageInfo: supabaseService.getStorageInfo,
+
+        // 兼容性属性
         isSupabaseMode: true,
         isCloudMode: true,
-    } as unknown as StorageContextType;
+    };
 
     return (
         <StorageContext.Provider value={storage}>

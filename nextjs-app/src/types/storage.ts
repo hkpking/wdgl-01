@@ -17,7 +17,7 @@ export interface User {
 // Document Types
 // ============================================
 
-export type DocumentStatus = 'draft' | 'review' | 'published';
+export type DocumentStatus = 'draft' | 'review' | 'published' | 'archived';
 
 export interface Document {
     id: string;
@@ -26,6 +26,8 @@ export interface Document {
     status: DocumentStatus;
     folderId?: string | null;
     parentId?: string | null;  // Alias for folderId (backward compatibility)
+    knowledgeBaseId?: string | null;
+    teamId?: string | null;
     createdAt: string;
     updatedAt: string;
     [key: string]: unknown;  // Allow dynamic property access for sorting
@@ -36,7 +38,7 @@ export interface DocumentVersion {
     documentId: string;
     title: string;
     content: string;
-    name?: string;
+    name: string | null;
     savedAt: string;
 }
 
@@ -71,7 +73,7 @@ export interface Comment {
     id: string;
     docId: string;
     content: string;
-    quote?: string;
+    quote?: string | null;
     status: 'open' | 'resolved';
     author: CommentAuthor;
     createdAt: string;
@@ -105,7 +107,7 @@ export interface StorageContextType {
     // Version Methods
     getVersions: (userId: string, docId: string) => Promise<DocumentVersion[]>;
     saveVersion: (userId: string, docId: string, data: { title: string; content: string; status?: DocumentStatus }) => Promise<DocumentVersion | null>;
-    updateVersion: (userId: string, docId: string, versionId: string, updates: { name?: string }) => Promise<{ id: string; name: string } | null>;
+    updateVersion: (userId: string, docId: string, versionId: string, updates: { name: string }) => Promise<{ id: string; name: string } | null>;
 
     // Folder Methods
     getFolders: (userId: string) => Promise<Folder[]>;
@@ -121,9 +123,15 @@ export interface StorageContextType {
     deleteComment: (userId: string, docId: string, commentId: string) => Promise<boolean>;
 
     // Storage Info
-    getStorageInfo: () => { used: number; total: number; percentage: number };
+    getStorageInfo: () => StorageInfo;
 
     // Legacy Compatibility
     isSupabaseMode: boolean;
     isCloudMode: boolean;
+}
+
+export interface StorageInfo {
+    used: number;
+    total: number;
+    percentage: number;
 }
