@@ -3,6 +3,99 @@
  * 提供与 mockStorage 相同的接口，实现后端数据持久化
  */
 import { supabase } from '../supabase';
+import type {
+    Document, DocumentInput, DocumentStatus,
+    Folder, FolderRow
+} from './documentService.types';
+import type { User } from '@/types/storage';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+
+// ============================================
+// 类型定义
+// ============================================
+
+/** 数据库文档行类型 */
+interface DbDocumentRow {
+    id: string;
+    user_id: string;
+    title: string;
+    content: string;
+    status: string;
+    folder_id: string | null;
+    knowledge_base_id: string | null;
+    team_id: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+/** 数据库文件夹行类型 */
+interface DbFolderRow {
+    id: string;
+    user_id: string;
+    name: string;
+    parent_id: string | null;
+    created_at: string;
+}
+
+/** 数据库版本行类型 */
+interface DbVersionRow {
+    id: string;
+    document_id: string;
+    user_id: string;
+    title: string;
+    content: string;
+    name: string | null;
+    created_at: string;
+}
+
+/** 数据库评论行类型 */
+interface DbCommentRow {
+    id: string;
+    document_id: string;
+    parent_id: string | null;
+    content: string;
+    quote: string | null;
+    status: string;
+    author_id: string;
+    author_name: string;
+    created_at: string;
+}
+
+/** 版本信息 */
+interface DocumentVersion {
+    id: string;
+    documentId: string;
+    title: string;
+    content: string;
+    name: string | null;
+    savedAt: string;
+}
+
+/** 评论信息 */
+interface Comment {
+    id: string;
+    docId: string;
+    content: string;
+    quote?: string | null;
+    status: string;
+    author: { uid: string; name: string };
+    createdAt: string;
+    replies: CommentReply[];
+}
+
+interface CommentReply {
+    id: string;
+    content: string;
+    author: { uid: string; name: string };
+    createdAt: string;
+}
+
+/** 存储信息 */
+interface StorageInfo {
+    used: number;
+    total: number;
+    percentage: number;
+}
 
 // ============================================
 // 工具函数
@@ -11,7 +104,7 @@ import { supabase } from '../supabase';
 /**
  * 获取当前用户 ID
  */
-const getCurrentUserId = async () => {
+const getCurrentUserId = async (): Promise<string | undefined> => {
     const { data: { user } } = await supabase.auth.getUser();
     return user?.id;
 };
@@ -23,7 +116,7 @@ const getCurrentUserId = async () => {
 /**
  * 获取用户所有个人文档（不包含知识库文档）
  */
-export async function getAllDocuments(userId) {
+export async function getAllDocuments(userId: string): Promise<Document[]> {
     const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -37,11 +130,11 @@ export async function getAllDocuments(userId) {
     }
 
     // 转换为兼容格式
-    return data.map(doc => ({
+    return data.map((doc: DbDocumentRow) => ({
         id: doc.id,
         title: doc.title,
         content: doc.content,
-        status: doc.status,
+        status: doc.status as DocumentStatus,
         folderId: doc.folder_id,
         knowledgeBaseId: doc.knowledge_base_id,
         teamId: doc.team_id,
@@ -54,7 +147,7 @@ export async function getAllDocuments(userId) {
  * 获取知识库文档列表
  * 统一使用 documents 表，通过 knowledge_base_id 过滤
  */
-export async function getKBDocuments(knowledgeBaseId) {
+export async function getKBDocuments(knowledgeBaseId: string): Promise<Document[]> {
     const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -82,7 +175,7 @@ export async function getKBDocuments(knowledgeBaseId) {
 /**
  * 获取单个文档
  */
-export async function getDocument(userId, docId) {
+export async function getDocument(userId: string, docId: string): Promise<Document | null> {
     const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -110,7 +203,7 @@ export async function getDocument(userId, docId) {
  * 获取知识库文档详情
  * 统一使用 documents 表
  */
-export async function getKBDocument(docId) {
+export async function getKBDocument(docId: string): Promise<Document | null> {
     const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -144,9 +237,9 @@ export async function getKBDocument(docId) {
 /**
  * 保存文档 (创建或更新)
  */
-export async function saveDocument(userId, docId, docData) {
+export async function saveDocument(userId: string, docId: string | null, docData: Partial<DocumentInput>): Promise<Document | null> {
     // 构建 payload，只包含已定义的字段 (Partial Update)
-    const payload = {
+    const payload: Record<string, unknown> = {
         user_id: userId,
         updated_at: new Date().toISOString(),
     };
@@ -276,7 +369,7 @@ export async function saveDocument(userId, docId, docData) {
 /**
  * 删除文档
  */
-export async function deleteDocument(userId, docId) {
+export async function deleteDocument(userId: string, docId: string): Promise<boolean> {
     const { error } = await supabase
         .from('documents')
         .delete()
@@ -297,7 +390,7 @@ export async function deleteDocument(userId, docId) {
 /**
  * 保存版本
  */
-export async function saveVersion(userId, docId, versionData) {
+export async function saveVersion(userId: string, docId: string, versionData: { title: string; content: string; name?: string }): Promise<DocumentVersion | null> {
     const { data, error } = await supabase
         .from('versions')
         .insert({
@@ -328,7 +421,7 @@ export async function saveVersion(userId, docId, versionData) {
 /**
  * 获取版本历史
  */
-export async function getVersions(userId, docId) {
+export async function getVersions(userId: string, docId: string): Promise<DocumentVersion[]> {
     const { data, error } = await supabase
         .from('versions')
         .select('*')
@@ -354,7 +447,7 @@ export async function getVersions(userId, docId) {
 /**
  * 更新版本信息
  */
-export async function updateVersion(userId, docId, versionId, updates) {
+export async function updateVersion(userId: string, docId: string, versionId: string, updates: { name: string }): Promise<{ id: string; name: string } | null> {
     const { data, error } = await supabase
         .from('versions')
         .update({ name: updates.name })
@@ -381,7 +474,7 @@ export async function updateVersion(userId, docId, versionId, updates) {
 /**
  * 获取所有文件夹
  */
-export async function getFolders(userId) {
+export async function getFolders(userId: string): Promise<Folder[]> {
     const { data, error } = await supabase
         .from('folders')
         .select('*')
@@ -404,7 +497,7 @@ export async function getFolders(userId) {
 /**
  * 创建文件夹
  */
-export async function createFolder(userId, name, parentId = null) {
+export async function createFolder(userId: string, name: string, parentId: string | null = null): Promise<Folder | null> {
     const { data, error } = await supabase
         .from('folders')
         .insert({
@@ -431,7 +524,7 @@ export async function createFolder(userId, name, parentId = null) {
 /**
  * 更新文件夹
  */
-export async function updateFolder(userId, folderId, updates) {
+export async function updateFolder(userId: string, folderId: string, updates: { name?: string; parentId?: string | null }): Promise<{ id: string; name: string; parentId: string | null } | null> {
     const { data, error } = await supabase
         .from('folders')
         .update({
@@ -458,7 +551,7 @@ export async function updateFolder(userId, folderId, updates) {
 /**
  * 删除文件夹
  */
-export async function deleteFolder(userId, folderId) {
+export async function deleteFolder(userId: string, folderId: string): Promise<boolean> {
     // 先将文件夹内的文档移动到根目录
     await supabase
         .from('documents')
@@ -482,7 +575,7 @@ export async function deleteFolder(userId, folderId) {
 /**
  * 移动文档到文件夹
  */
-export async function moveDocument(userId, docId, folderId) {
+export async function moveDocument(userId: string, docId: string, folderId: string | null): Promise<{ id: string; folderId: string | null } | null> {
     const { data, error } = await supabase
         .from('documents')
         .update({ folder_id: folderId })
@@ -509,7 +602,7 @@ export async function moveDocument(userId, docId, folderId) {
 /**
  * 获取文档评论
  */
-export async function getComments(userId, docId) {
+export async function getComments(userId: string, docId: string): Promise<Comment[]> {
     const { data, error } = await supabase
         .from('comments')
         .select('*')
@@ -559,7 +652,7 @@ export async function getComments(userId, docId) {
 /**
  * 添加评论
  */
-export async function addComment(userId, docId, commentData) {
+export async function addComment(userId: string, docId: string, commentData: { content: string; quote?: string; author?: { name: string } }): Promise<Comment | null> {
     const { data, error } = await supabase
         .from('comments')
         .insert({
@@ -595,7 +688,7 @@ export async function addComment(userId, docId, commentData) {
 /**
  * 添加回复
  */
-export async function addReply(userId, docId, commentId, replyData) {
+export async function addReply(userId: string, docId: string, commentId: string, replyData: { content: string; author?: { name: string } }): Promise<CommentReply | null> {
     const { data, error } = await supabase
         .from('comments')
         .insert({
@@ -627,7 +720,7 @@ export async function addReply(userId, docId, commentId, replyData) {
 /**
  * 更新评论状态
  */
-export async function updateCommentStatus(userId, docId, commentId, status) {
+export async function updateCommentStatus(userId: string, docId: string, commentId: string, status: string): Promise<{ id: string; status: string } | null> {
     const { data, error } = await supabase
         .from('comments')
         .update({ status })
@@ -649,7 +742,7 @@ export async function updateCommentStatus(userId, docId, commentId, status) {
 /**
  * 删除评论
  */
-export async function deleteComment(userId, docId, commentId) {
+export async function deleteComment(userId: string, docId: string, commentId: string): Promise<boolean> {
     const { error } = await supabase
         .from('comments')
         .delete()
@@ -669,7 +762,7 @@ export async function deleteComment(userId, docId, commentId) {
 /**
  * 获取当前用户
  */
-export async function getCurrentUser() {
+export async function getCurrentUser(): Promise<User | null> {
     const { data: { user }, error } = await supabase.auth.getUser();
 
     if (error || !user) {
@@ -679,14 +772,14 @@ export async function getCurrentUser() {
     return {
         uid: user.id,
         email: user.email,
-        displayName: user.user_metadata?.display_name || user.email?.split('@')[0],
+        displayName: user.user_metadata?.display_name || user.email?.split('@')[0] || 'User',
     };
 }
 
 /**
  * 邮箱密码登录
  */
-export async function signInWithEmail(email, password) {
+export async function signInWithEmail(email: string, password: string): Promise<User> {
     const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -699,14 +792,14 @@ export async function signInWithEmail(email, password) {
     return {
         uid: data.user.id,
         email: data.user.email,
-        displayName: data.user.user_metadata?.display_name || email.split('@')[0],
+        displayName: data.user.user_metadata?.display_name || email.split('@')[0] || 'User',
     };
 }
 
 /**
  * 邮箱密码注册
  */
-export async function signUpWithEmail(email, password, displayName) {
+export async function signUpWithEmail(email: string, password: string, displayName: string): Promise<User> {
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -722,7 +815,7 @@ export async function signUpWithEmail(email, password, displayName) {
     }
 
     return {
-        uid: data.user?.id,
+        uid: data.user?.id || '',
         email: data.user?.email,
         displayName,
     };
@@ -731,7 +824,7 @@ export async function signUpWithEmail(email, password, displayName) {
 /**
  * 登出
  */
-export async function signOut() {
+export async function signOut(): Promise<void> {
     const { error } = await supabase.auth.signOut();
     if (error) {
         throw error;
@@ -741,13 +834,13 @@ export async function signOut() {
 /**
  * 监听认证状态变化
  */
-export function onAuthStateChange(callback) {
+export function onAuthStateChange(callback: (user: User | null) => void) {
     return supabase.auth.onAuthStateChange((event, session) => {
         if (session?.user) {
             callback({
                 uid: session.user.id,
                 email: session.user.email,
-                displayName: session.user.user_metadata?.display_name || session.user.email?.split('@')[0],
+                displayName: session.user.user_metadata?.display_name || session.user.email?.split('@')[0] || 'User',
             });
         } else {
             callback(null);
@@ -762,7 +855,7 @@ export function onAuthStateChange(callback) {
 /**
  * 搜索文档
  */
-export async function searchDocuments(userId, query) {
+export async function searchDocuments(userId: string, query: string): Promise<Partial<Document>[]> {
     const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -792,7 +885,7 @@ export async function searchDocuments(userId, query) {
 /**
  * 获取存储使用情况 (Supabase 中暂不实现详细统计)
  */
-export function getStorageInfo() {
+export function getStorageInfo(): StorageInfo {
     return {
         used: 0,
         total: Infinity,
