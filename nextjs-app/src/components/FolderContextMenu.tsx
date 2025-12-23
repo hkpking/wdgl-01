@@ -4,7 +4,7 @@ import { Edit2, Trash2, FolderPlus, ChevronRight } from 'lucide-react';
 interface FolderContextMenuProps {
     x: number;
     y: number;
-    type: 'folder' | 'document';
+    type: 'folder' | 'document' | 'spreadsheet';
     onClose: () => void;
     onRename: () => void;
     onDelete: () => void;

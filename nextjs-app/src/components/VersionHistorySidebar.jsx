@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MoreVertical, ChevronRight, ChevronDown, Check, X, GitCompare } from 'lucide-react';
-import * as mockStorage from '@/lib/storage';
+import * as mockStorage from '@/lib/services/mockStorage';
 import VersionDiff from './VersionDiff';
 
 export default function VersionHistorySidebar({ docId, currentUser, onSelectVersion, currentVersionId, onClose }) {
@@ -214,10 +214,10 @@ export default function VersionHistorySidebar({ docId, currentUser, onSelectVers
                                         <div
                                             key={version.id}
                                             className={`group relative flex items-start justify-between p-3 rounded-lg cursor-pointer transition-colors border ${isCompareSource
-                                                    ? 'bg-yellow-50 border-yellow-300'
-                                                    : isSelected
-                                                        ? 'bg-blue-50 border-blue-200'
-                                                        : 'hover:bg-gray-50 border-transparent hover:border-gray-200'
+                                                ? 'bg-yellow-50 border-yellow-300'
+                                                : isSelected
+                                                    ? 'bg-blue-50 border-blue-200'
+                                                    : 'hover:bg-gray-50 border-transparent hover:border-gray-200'
                                                 }`}
                                             onClick={handleVersionClick}
                                         >

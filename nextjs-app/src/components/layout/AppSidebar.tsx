@@ -26,7 +26,9 @@ import {
 import * as teamService from '@/lib/services/teamService';
 import type { Team, KnowledgeBase, KBFolder } from '@/types/team';
 import CreateTeamModal from '@/components/Team/CreateTeamModal';
+import CreateItemModal from '@/components/shared/CreateItemModal';
 import FolderTree from '@/components/FolderTree';
+import RecentDocs from '@/components/shared/RecentDocs';
 
 interface KBDocument {
     id: string;
@@ -57,9 +59,11 @@ interface AppSidebarProps {
     onSelectKBDoc?: (docId: string) => void;
     onSelectKBHome?: () => void;
     onKBFolderAction?: (e: React.MouseEvent, folder: any, action: string) => void;
-    onMenuClick?: (e: React.MouseEvent, item: any, type: 'folder' | 'document' | 'create-folder') => void;
+    onMenuClick?: (e: React.MouseEvent, item: any, type: 'folder' | 'document' | 'spreadsheet' | 'create-folder') => void;
     onMoveItem?: (itemId: string, itemType: string, targetFolderId: string | null) => void;
     onCollapse?: () => void;
+    renamingItemId?: string | null;
+    onRenameItem?: (id: string, newName: string | null, type: 'folder' | 'document' | 'spreadsheet') => void;
 }
 
 export default function AppSidebar({
@@ -82,7 +86,9 @@ export default function AppSidebar({
     onKBFolderAction,
     onMenuClick,
     onMoveItem,
-    onCollapse
+    onCollapse,
+    renamingItemId,
+    onRenameItem
 }: AppSidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
@@ -91,12 +97,14 @@ export default function AppSidebar({
     const [teams, setTeams] = useState<Team[]>([]);
     const [teamsExpanded, setTeamsExpanded] = useState(true);
     const [isCreateTeamModalOpen, setIsCreateTeamModalOpen] = useState(false);
+    const [isCreateItemModalOpen, setIsCreateItemModalOpen] = useState(false);
     const [loadingTeams, setLoadingTeams] = useState(false);
+
 
     const navItems = [
         { id: 'ask-ai', label: '问AI', icon: Sparkles, href: '/ask-ai', color: 'text-blue-600' },
-        { id: 'discover', label: '发现', icon: Compass, href: '/discover', color: 'text-gray-600', disabled: true },
-        { id: 'my-docs', label: '我的文档', icon: User, href: '/dashboard', color: 'text-gray-600' },
+        // 发现功能待上线
+        // { id: 'discover', label: '发现', icon: Compass, href: '/discover', color: 'text-gray-600', disabled: true },
     ];
 
     const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/');
@@ -172,7 +180,7 @@ export default function AppSidebar({
                 <div className="p-3 space-y-3">
                     <div className="flex gap-2">
                         <button
-                            onClick={onCreateDoc}
+                            onClick={() => setIsCreateItemModalOpen(true)}
                             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
                         >
                             <Plus size={16} />
@@ -235,6 +243,8 @@ export default function AppSidebar({
                                     onMoveItem={onMoveItem}
                                     showHome={false}
                                     enableDragDrop={true}
+                                    renamingItemId={renamingItemId}
+                                    onRename={onRenameItem}
                                 />
                             </div>
                         </>
@@ -246,54 +256,24 @@ export default function AppSidebar({
                                 {navItems.map(item => (
                                     <Link
                                         key={item.id}
-                                        href={item.disabled ? '#' : item.href}
+                                        href={item.href}
                                         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition text-sm font-medium ${isActive(item.href)
                                             ? 'bg-blue-50 text-blue-700'
-                                            : item.disabled
-                                                ? 'text-gray-400 cursor-not-allowed'
-                                                : 'text-gray-700 hover:bg-gray-100'
+                                            : 'text-gray-700 hover:bg-gray-100'
                                             }`}
-                                        onClick={e => item.disabled && e.preventDefault()}
                                     >
                                         <item.icon size={18} className={isActive(item.href) ? 'text-blue-600' : item.color} />
                                         {item.label}
-                                        {item.disabled && (
-                                            <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">即将上线</span>
-                                        )}
                                     </Link>
                                 ))}
                             </div>
 
-                            {/* 快速访问 - 文件夹 */}
-                            {folders.length > 0 && (
-                                <div className="border-t border-gray-100 pt-4 mb-4">
-                                    <div className="flex items-center justify-between px-3 mb-2">
-                                        <span className="text-xs font-semibold text-gray-400 uppercase">快速访问</span>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <button
-                                            onClick={() => onSelectFolder?.(null)}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition ${!selectedFolderId ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-600 hover:bg-gray-50'
-                                                }`}
-                                        >
-                                            <FolderOpen size={16} />
-                                            全部文档
-                                        </button>
-                                        {rootFolders.map(folder => (
-                                            <button
-                                                key={folder.id}
-                                                onClick={() => onSelectFolder?.(folder.id)}
-                                                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition ${selectedFolderId === folder.id ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-600 hover:bg-gray-50'
-                                                    }`}
-                                            >
-                                                <FolderOpen size={16} />
-                                                <span className="truncate">{folder.name}</span>
-                                                <ChevronRight size={14} className="ml-auto text-gray-400" />
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+
+                            {/* 最近访问区域 */}
+                            <div className="border-t border-gray-100 pt-3 mb-3">
+                                <RecentDocs maxItems={5} />
+                            </div>
+
 
                             {/* 团队列表区域 */}
                             <div className="border-t border-gray-100 pt-4">
@@ -303,7 +283,7 @@ export default function AppSidebar({
                                         className="flex items-center gap-1 text-xs font-semibold text-gray-400 uppercase hover:text-gray-600"
                                     >
                                         {teamsExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                                        采用团队
+                                        常用团队
                                     </button>
                                     <button
                                         onClick={() => setIsCreateTeamModalOpen(true)}
@@ -387,6 +367,21 @@ export default function AppSidebar({
                 isOpen={isCreateTeamModalOpen}
                 onClose={() => setIsCreateTeamModalOpen(false)}
                 onSubmit={handleCreateTeam}
+            />
+
+            {/* 新建文档/表格弹窗 */}
+            <CreateItemModal
+                isOpen={isCreateItemModalOpen}
+                onClose={() => setIsCreateItemModalOpen(false)}
+                currentUser={currentUser}
+                defaultTeamId={mode === 'knowledgeBase' && kb ? kb.teamId : undefined}
+                defaultKbId={mode === 'knowledgeBase' && kb ? kb.id : undefined}
+                onCreateDocument={(teamId, kbId) => {
+                    router.push(`/teams/${teamId}/kb/${kbId}?action=new-doc`);
+                }}
+                onCreateSpreadsheet={(teamId, kbId) => {
+                    router.push(`/teams/${teamId}/kb/${kbId}?action=new-sheet`);
+                }}
             />
         </>
     );

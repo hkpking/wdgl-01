@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, FileText, Shield, X, Check } from 'lucide-react';
-import * as mockStorage from '@/lib/storage';
+import * as mockStorage from '@/lib/services/mockStorage';
 
 export default function SourceSelector({ isOpen, onClose, onSelect, currentUser, excludeIds = [] }) {
     const [activeTab, setActiveTab] = useState('project'); // 'project', 'system'

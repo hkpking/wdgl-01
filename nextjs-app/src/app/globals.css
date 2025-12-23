@@ -12,6 +12,19 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* FortuneSheet/LuckySheet Input Fix for Dark Mode */
+.luckysheet-input-box,
+.fortune-input-box {
+  color: #000 !important;
+  background-color: #fff !important;
+}
+
+/* 确保富文本编辑框也是黑字白底 */
+.luckysheet-rich-text-editor,
+.fortune-rich-text-editor {
+  color: #000 !important;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;

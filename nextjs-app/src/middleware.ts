@@ -26,14 +26,19 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // 已登录用户访问登录页 -> 重定向到问 AI 页面
+    // 已登录用户访问登录页 -> 重定向到 Dashboard
     if (user && isAuthPage) {
-        return NextResponse.redirect(new URL('/ask-ai', request.url))
+        return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
-    // 已登录用户访问首页 -> 重定向到问 AI 页面
+    // 已登录用户访问首页 -> 重定向到 Dashboard
     if (user && request.nextUrl.pathname === '/') {
-        return NextResponse.redirect(new URL('/ask-ai', request.url))
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
+    // 统一路由：/ask-ai 重定向到 /dashboard
+    if (request.nextUrl.pathname.startsWith('/ask-ai')) {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
     return response

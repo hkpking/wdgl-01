@@ -5,9 +5,8 @@
 
 import { supabase } from '@/lib/services/supabase';
 import type {
-    KnowledgeBase, KBFolder, KBDocument,
-    CreateKBInput, UpdateKBInput,
-    CreateKBDocumentInput, UpdateKBDocumentInput
+    KnowledgeBase, KBFolder,
+    CreateKBInput, UpdateKBInput
 } from '@/types/team';
 
 // ============================================
@@ -211,121 +210,7 @@ export async function deleteKBFolder(folderId: string): Promise<boolean> {
     return true;
 }
 
-// ============================================
-// 知识库文档
-// ============================================
 
-/**
- * 获取知识库文档列表
- */
-export async function getKBDocuments(kbId: string, folderId?: string | null): Promise<KBDocument[]> {
-    let query = supabase
-        .from('kb_documents')
-        .select(`
-            *,
-            profiles:author_id(id, display_name, avatar_url)
-        `)
-        .eq('knowledge_base_id', kbId)
-        .order('updated_at', { ascending: false });
-
-    if (folderId !== undefined) {
-        query = query.eq('folder_id', folderId);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-        console.error('[kbService] 获取文档列表失败:', error);
-        return [];
-    }
-
-    return (data || []).map(transformKBDocument);
-}
-
-/**
- * 获取文档详情
- */
-export async function getKBDocument(docId: string): Promise<KBDocument | null> {
-    const { data, error } = await supabase
-        .from('kb_documents')
-        .select('*')
-        .eq('id', docId)
-        .single();
-
-    if (error) {
-        console.error('[kbService] 获取文档详情失败:', error);
-        return null;
-    }
-
-    return transformKBDocument(data);
-}
-
-/**
- * 创建文档
- */
-export async function createKBDocument(userId: string, input: CreateKBDocumentInput): Promise<KBDocument | null> {
-    const { data, error } = await supabase
-        .from('kb_documents')
-        .insert({
-            title: input.title || '无标题文档',
-            content: input.content || '',
-            status: input.status || 'draft',
-            folder_id: input.folderId || null,
-            knowledge_base_id: input.knowledgeBaseId,
-            author_id: userId
-        })
-        .select()
-        .single();
-
-    if (error) {
-        console.error('[kbService] 创建文档失败:', error);
-        return null;
-    }
-
-    return transformKBDocument(data);
-}
-
-/**
- * 更新文档
- */
-export async function updateKBDocument(docId: string, input: UpdateKBDocumentInput): Promise<KBDocument | null> {
-    const updates: Record<string, unknown> = {};
-    if (input.title !== undefined) updates.title = input.title;
-    if (input.content !== undefined) updates.content = input.content;
-    if (input.status !== undefined) updates.status = input.status;
-    if (input.folderId !== undefined) updates.folder_id = input.folderId;
-
-    const { data, error } = await supabase
-        .from('kb_documents')
-        .update(updates)
-        .eq('id', docId)
-        .select()
-        .single();
-
-    if (error) {
-        console.error('[kbService] 更新文档失败:', error);
-        return null;
-    }
-
-    return transformKBDocument(data);
-}
-
-/**
- * 删除文档
- */
-export async function deleteKBDocument(docId: string): Promise<boolean> {
-    const { error } = await supabase
-        .from('kb_documents')
-        .delete()
-        .eq('id', docId);
-
-    if (error) {
-        console.error('[kbService] 删除文档失败:', error);
-        return false;
-    }
-
-    return true;
-}
 
 // ============================================
 // 数据转换
@@ -353,24 +238,5 @@ function transformKBFolder(data: any): KBFolder {
         knowledgeBaseId: data.knowledge_base_id,
         createdAt: data.created_at,
         updatedAt: data.updated_at
-    };
-}
-
-function transformKBDocument(data: any): KBDocument {
-    return {
-        id: data.id,
-        title: data.title,
-        content: data.content,
-        status: data.status,
-        folderId: data.folder_id,
-        knowledgeBaseId: data.knowledge_base_id,
-        authorId: data.author_id,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-        author: data.profiles ? {
-            id: data.profiles.id,
-            displayName: data.profiles.display_name,
-            avatarUrl: data.profiles.avatar_url
-        } : undefined
     };
 }

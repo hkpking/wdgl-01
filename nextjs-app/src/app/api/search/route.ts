@@ -32,6 +32,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false }
 });
 
+
+/**
+ * 计算余弦相似度
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+    if (!a || !b || a.length !== b.length) return 0;
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < a.length; i++) {
+        dotProduct += a[i] * b[i];
+        normA += a[i] * a[i];
+        normB += b[i] * b[i];
+    }
+    const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+    return denominator === 0 ? 0 : dotProduct / denominator;
+}
+
 /**
  * 计算关键词匹配分数（支持中文）
  * 检查 chunk 是否包含查询中的关键词
@@ -149,22 +167,95 @@ export async function POST(req: NextRequest) {
 
         // 3. 数据库相似度搜索（获取更多候选用于 Re-ranking）
         const candidateCount = enableRerank ? 20 : topK * 2;
-        const { data, error } = await supabase.rpc('match_documents', {
+
+        // 3.1 搜索文档
+        const { data: docData, error: docError } = await supabase.rpc('match_documents', {
             query_embedding: JSON.stringify(queryEmbedding),
             match_threshold: 0.05, // 极低阈值，确保不遗漏
             match_count: candidateCount,
             p_user_id: userId || null
         });
 
-        if (error) {
-            console.error('[Search] RPC error:', error);
-            return Response.json(
-                { error: `Search failed: ${error.message}` },
-                { status: 500 }
-            );
+        if (docError) {
+            console.error('[Search] Document RPC error:', docError);
         }
 
-        if (!data || data.length === 0) {
+        // 3.2 搜索表格 (使用真实向量检索)
+        let spreadsheetResults: any[] = [];
+        try {
+            // 使用新创建的 match_spreadsheets RPC 函数
+            const { data: sheetData, error: sheetError } = await supabase.rpc('match_spreadsheets', {
+                query_embedding: JSON.stringify(queryEmbedding), // 384 dim embedding
+                match_threshold: 0.1,  // 相似度阈值
+                match_count: candidateCount,
+                p_user_id: userId || null
+            });
+
+            if (sheetError) {
+                // 如果函数不存在（迁移未执行），回退到旧逻辑或报错
+                console.warn('[Search] 表格向量检索出错 (可能是 RPC 未创建):', sheetError);
+            } else if (sheetData && sheetData.length > 0) {
+                // 获取表格元数据（team_id, knowledge_base_id, title）
+                const sheetIds = [...new Set(sheetData.map((r: any) => r.spreadsheet_id))];
+                const { data: sheetMeta } = await supabase
+                    .from('spreadsheets')
+                    .select('id, title, team_id, knowledge_base_id')
+                    .in('id', sheetIds);
+                const sheetMetaMap = new Map((sheetMeta || []).map((s: any) => [s.id, s]));
+
+                spreadsheetResults = sheetData.map((r: any) => {
+                    const meta = sheetMetaMap.get(r.spreadsheet_id) || {};
+                    return {
+                        document_id: r.spreadsheet_id,
+                        chunk_text: r.chunk_text,
+                        similarity: r.similarity,
+                        metadata: {
+                            ...r.metadata,
+                            title: meta.title || r.metadata?.title || '无标题表格',
+                            type: 'spreadsheet',
+                            team_id: meta.team_id,
+                            knowledge_base_id: meta.knowledge_base_id
+                        },
+                        type: 'spreadsheet'
+                    };
+                });
+
+                console.log(`[Search] 找到 ${spreadsheetResults.length} 条表格结果 (Vector Search)`);
+            }
+        } catch (sheetErr) {
+            console.warn('[Search] 表格搜索失败:', sheetErr);
+        }
+
+        // 3.3 为文档结果添加元数据
+        let enrichedDocResults = (docData || []).map((r: any) => ({ ...r, type: 'document' }));
+        if (enrichedDocResults.length > 0) {
+            const docIds = [...new Set(enrichedDocResults.map((r: any) => r.document_id))];
+            const { data: docMeta } = await supabase
+                .from('documents')
+                .select('id, team_id, knowledge_base_id')
+                .in('id', docIds);
+            const docMetaMap = new Map((docMeta || []).map((d: any) => [d.id, d]));
+
+            enrichedDocResults = enrichedDocResults.map((r: any) => {
+                const meta = docMetaMap.get(r.document_id) || {};
+                return {
+                    ...r,
+                    metadata: {
+                        ...r.metadata,
+                        team_id: meta.team_id,
+                        knowledge_base_id: meta.knowledge_base_id
+                    }
+                };
+            });
+        }
+
+        // 合并文档和表格结果
+        const allResults = [
+            ...enrichedDocResults,
+            ...spreadsheetResults
+        ];
+
+        if (allResults.length === 0) {
             console.log('[Search] 无搜索结果');
             return Response.json({
                 results: [],
@@ -174,7 +265,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 4. 混合排序：向量相似度 + 关键词匹配
-        let results = (data || []).map((r: any) => {
+        let results = allResults.map((r: any) => {
             const keywordBoost = calculateKeywordBoost(query, r.chunk_text);
             const hybridScore = r.similarity + keywordBoost;
             return { ...r, keywordBoost, hybridScore };
@@ -209,8 +300,13 @@ export async function POST(req: NextRequest) {
             // 直接按文档 ID 过滤
             filteredResults = rerankedResults.filter((r: any) => r.document_id === documentId);
         } else if (teamId || knowledgeBaseId) {
-            // 需要查询 documents 表获取关联信息
-            const docIds = [...new Set(rerankedResults.map((r: any) => r.document_id))];
+            // 分离文档和表格结果
+            const docResults = rerankedResults.filter((r: any) => r.type !== 'spreadsheet');
+            const sheetResults = rerankedResults.filter((r: any) => r.type === 'spreadsheet');
+
+            // 文档过滤：需要查询 documents 表获取关联信息
+            let filteredDocs: any[] = [];
+            const docIds = [...new Set(docResults.map((r: any) => r.document_id))];
             if (docIds.length > 0) {
                 const { data: docs } = await supabase
                     .from('documents')
@@ -219,7 +315,7 @@ export async function POST(req: NextRequest) {
 
                 const docMap = new Map((docs || []).map((d: any) => [d.id, d]));
 
-                filteredResults = rerankedResults.filter((r: any) => {
+                filteredDocs = docResults.filter((r: any) => {
                     const doc = docMap.get(r.document_id);
                     if (!doc) return false;
                     if (knowledgeBaseId && doc.knowledge_base_id !== knowledgeBaseId) return false;
@@ -227,6 +323,21 @@ export async function POST(req: NextRequest) {
                     return true;
                 });
             }
+
+            // 表格过滤：直接使用 metadata 中的 team_id/knowledge_base_id
+            const filteredSheets = sheetResults.filter((r: any) => {
+                const meta = r.metadata || {};
+                if (knowledgeBaseId && meta.knowledge_base_id !== knowledgeBaseId) return false;
+                if (teamId && meta.team_id !== teamId) return false;
+                return true;
+            });
+
+            // 合并并按原有排序保持
+            const filteredSet = new Set([
+                ...filteredDocs.map((r: any) => r.document_id),
+                ...filteredSheets.map((r: any) => r.document_id)
+            ]);
+            filteredResults = rerankedResults.filter((r: any) => filteredSet.has(r.document_id));
         }
 
         // 7. 按文档去重（同一文档只保留最相关的 chunk）
@@ -241,7 +352,7 @@ export async function POST(req: NextRequest) {
         }
 
         const timeMs = Date.now() - startTime;
-        console.log(`[Search] 找到 ${data.length} 条原始结果, 去重后 ${dedupedResults.length} 条, 耗时 ${timeMs}ms`);
+        console.log(`[Search] 找到 ${allResults.length} 条原始结果, 去重后 ${dedupedResults.length} 条, 耗时 ${timeMs}ms`);
 
         // 详细日志
         dedupedResults.forEach((r: any, i: number) => {
@@ -300,7 +411,7 @@ export async function POST(req: NextRequest) {
                 appliedFilters: filterHints.length > 0 ? filterHints : null,
                 knowledgeGraphUsed: enableKnowledgeGraph && knowledgeRelatedDocs.length > 0,
                 expandedQuery: enableKnowledgeGraph && enhancedQuery !== query ? enhancedQuery : null,
-                totalCandidates: data.length,
+                totalCandidates: allResults.length,
                 rerankApplied: enableRerank && results.length > 2
             }
         });

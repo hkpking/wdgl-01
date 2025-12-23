@@ -30,7 +30,7 @@ export default function KBEditorPage() {
     const docId = params.docId as string;
 
     const storageContext = useStorage() as any;
-    const { currentUser, loading: authLoading } = storageContext;
+    const { currentUser, loading: authLoading, getDocument, saveDocument } = storageContext;
 
     // 知识库相关状态
     const [kb, setKb] = useState<KnowledgeBase | null>(null);
@@ -92,9 +92,10 @@ export default function KBEditorPage() {
         if (!docId || !teamId || !kbId || !currentUser?.uid) return;
         setLoading(true);
         try {
+            // 统一使用 documents 表
             const [kbData, docData, role] = await Promise.all([
                 kbService.getKnowledgeBase(kbId),
-                kbService.getKBDocument(docId),
+                getDocument(currentUser.uid, docId),
                 teamService.getUserRoleInTeam(teamId, currentUser.uid)
             ]);
             setKb(kbData);
@@ -114,17 +115,18 @@ export default function KBEditorPage() {
 
     // 保存文档
     const handleSave = useCallback(async () => {
-        if (!docId || !hasChanges) return;
+        if (!docId || !hasChanges || !currentUser?.uid) return;
         setSaving(true);
         try {
-            await kbService.updateKBDocument(docId, { title, content, status: status as any });
+            // 统一使用 documents 表
+            await saveDocument(currentUser.uid, docId, { title, content, status });
             setHasChanges(false);
         } catch (error) {
             console.error('保存失败:', error);
         } finally {
             setSaving(false);
         }
-    }, [docId, title, content, status, hasChanges]);
+    }, [docId, title, content, status, hasChanges, currentUser?.uid, saveDocument]);
 
     // 自动保存
     useEffect(() => {

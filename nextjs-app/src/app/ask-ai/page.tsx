@@ -13,13 +13,12 @@ import { useStorage } from '@/contexts/StorageContext';
 import { useFolderManager } from '@/hooks/useFolderManager';
 import { useGlobalSearch } from '@/hooks/useGlobalSearch';
 import { useConversationHistory, type SearchReference } from '@/hooks/useConversationHistory';
-import { DOC_STATUS } from '@/lib/constants';
 import type { DocumentStatus } from '@/types/storage';
 
 export default function AskAIPage() {
     const router = useRouter();
     const storageContext = useStorage();
-    const { currentUser, loading: authLoading, signOut, saveDocument } = storageContext;
+    const { currentUser, loading: authLoading, signOut } = storageContext;
 
     // 文件夹管理
     const folderManager = useFolderManager(currentUser);
@@ -65,26 +64,7 @@ export default function AskAIPage() {
         }
     };
 
-    // 创建新文档
-    const handleCreateDoc = async () => {
-        if (!currentUser) return;
-        try {
-            const newDoc = {
-                title: '无标题文档',
-                content: '',
-                status: DOC_STATUS.DRAFT as DocumentStatus,
-                contentType: 'html',
-                folderId: selectedFolderId
-            };
-            const savedDoc = await saveDocument(currentUser.uid, null, newDoc);
-            if (savedDoc?.id) {
-                router.push(`/editor/${savedDoc.id}`);
-            }
-        } catch (error) {
-            console.error('创建文档失败:', error);
-            alert('创建文档失败');
-        }
-    };
+
 
     // 上传功能
     const handleUpload = () => {
@@ -126,7 +106,6 @@ export default function AskAIPage() {
             <AppSidebar
                 currentUser={currentUser}
                 onLogout={handleLogout}
-                onCreateDoc={handleCreateDoc}
                 onUpload={handleUpload}
                 folders={folders}
                 selectedFolderId={selectedFolderId}

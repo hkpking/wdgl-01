@@ -51,7 +51,8 @@ export async function getAllDocuments(userId) {
 }
 
 /**
- * 获取知识库的所有文档
+ * 获取知识库文档列表
+ * 统一使用 documents 表，通过 knowledge_base_id 过滤
  */
 export async function getKBDocuments(knowledgeBaseId) {
     const { data, error } = await supabase
@@ -106,18 +107,61 @@ export async function getDocument(userId, docId) {
 }
 
 /**
+ * 获取知识库文档详情
+ * 统一使用 documents 表
+ */
+export async function getKBDocument(docId) {
+    const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', docId)
+        .maybeSingle();
+
+    if (error) {
+        console.error('获取知识库文档失败:', error);
+        return null;
+    }
+
+    // 如果没有找到文档
+    if (!data) {
+        console.warn('文档不存在:', docId);
+        return null;
+    }
+
+    return {
+        id: data.id,
+        title: data.title,
+        content: data.content,
+        status: data.status,
+        folderId: data.folder_id,
+        knowledgeBaseId: data.knowledge_base_id,
+        teamId: data.team_id,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+    };
+}
+
+/**
  * 保存文档 (创建或更新)
  */
 export async function saveDocument(userId, docId, docData) {
+    // 构建 payload，只包含已定义的字段 (Partial Update)
     const payload = {
-        title: docData.title,
-        content: docData.content,
-        status: docData.status || 'draft',
-        folder_id: docData.folderId || null,
-        knowledge_base_id: docData.knowledgeBaseId || null,
-        team_id: docData.teamId || null,
         user_id: userId,
+        updated_at: new Date().toISOString(),
     };
+
+    if (docData.title !== undefined) payload.title = docData.title;
+    if (docData.content !== undefined) payload.content = docData.content;
+    if (docData.status !== undefined) payload.status = docData.status; // 不要默认 'draft'，防止覆盖
+    if (docData.folderId !== undefined) payload.folder_id = docData.folderId; // 支持 null (移出文件夹)
+    if (docData.knowledgeBaseId !== undefined) payload.knowledge_base_id = docData.knowledgeBaseId;
+    if (docData.teamId !== undefined) payload.team_id = docData.teamId;
+
+    // 如果是创建且没有 status，则默认为 draft
+    if (!docId && !payload.status) {
+        payload.status = 'draft';
+    }
 
     let result;
 

@@ -1,0 +1,72 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [active]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - navigation [ref=e7]:
+            - button "previous" [disabled] [ref=e8]:
+              - img "previous" [ref=e9]
+            - generic [ref=e11]:
+              - generic [ref=e12]: 1/
+              - text: "2"
+            - button "next" [ref=e13] [cursor=pointer]:
+              - img "next" [ref=e14]
+          - img
+        - generic [ref=e16]:
+          - link "Next.js 16.0.8 (stale) Turbopack" [ref=e17] [cursor=pointer]:
+            - /url: https://nextjs.org/docs/messages/version-staleness
+            - img [ref=e18]
+            - generic "There is a newer version (16.1.0) available, upgrade recommended!" [ref=e20]: Next.js 16.0.8 (stale)
+            - generic [ref=e21]: Turbopack
+          - img
+      - generic [ref=e22]:
+        - dialog "Console Error" [ref=e23]:
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - generic [ref=e28]:
+                - generic [ref=e30]: Console Error
+                - generic [ref=e31]:
+                  - button "Copy Error Info" [ref=e32] [cursor=pointer]:
+                    - img [ref=e33]
+                  - button "No related documentation found" [disabled] [ref=e35]:
+                    - img [ref=e36]
+                  - link "Learn more about enabling Node.js inspector for server code with Chrome DevTools" [ref=e38] [cursor=pointer]:
+                    - /url: https://nextjs.org/docs/app/building-your-application/configuring/debugging#server-side-code
+                    - img [ref=e39]
+              - generic [ref=e48]: Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+            - generic [ref=e51]:
+              - paragraph [ref=e52]:
+                - text: Call Stack
+                - generic [ref=e53]: "57"
+              - button "Show 57 ignore-listed frame(s)" [ref=e54] [cursor=pointer]:
+                - text: Show 57 ignore-listed frame(s)
+                - img [ref=e55]
+          - generic [ref=e57]: "1"
+          - generic [ref=e58]: "2"
+        - contentinfo [ref=e59]:
+          - region "Error feedback" [ref=e60]:
+            - paragraph [ref=e61]:
+              - link "Was this helpful?" [ref=e62] [cursor=pointer]:
+                - /url: https://nextjs.org/telemetry#error-feedback
+            - button "Mark as helpful" [ref=e63] [cursor=pointer]:
+              - img [ref=e64]
+            - button "Mark as not helpful" [ref=e67] [cursor=pointer]:
+              - img [ref=e68]
+    - generic [ref=e74] [cursor=pointer]:
+      - button "Open Next.js Dev Tools" [ref=e75]:
+        - img [ref=e76]
+      - generic [ref=e79]:
+        - button "Open issues overlay" [ref=e80]:
+          - generic [ref=e81]:
+            - generic [ref=e82]: "1"
+            - generic [ref=e83]: "2"
+          - generic [ref=e84]:
+            - text: Issue
+            - generic [ref=e85]: s
+        - button "Collapse issues badge" [ref=e86]:
+          - img [ref=e87]
+  - 'heading "Application error: a client-side exception has occurred while loading localhost (see the browser console for more information)." [level=2] [ref=e91]'
+```

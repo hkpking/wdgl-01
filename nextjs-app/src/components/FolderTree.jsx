@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText, MoreVertical, Plus, Home } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText, FileSpreadsheet, MoreVertical, Plus, Home } from 'lucide-react';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, closestCenter } from '@dnd-kit/core';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
@@ -7,10 +7,10 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 // 拖拽相关组件
 // ==========================================
 
-const DraggableWrapper = ({ id, type, children, disabled = false }) => {
+const DraggableWrapper = ({ id, type, itemId, children, disabled = false }) => {
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id,
-        data: { type, id },
+        data: { type, id: itemId }, // 使用纯净的 itemId 而不是带前缀的 drag id
         disabled
     });
 
@@ -37,29 +37,178 @@ const DroppableFolder = ({ id, children, isOver }) => {
 };
 
 // ==========================================
-// 文档项组件
+// 文档/表格项组件
 // ==========================================
 
-const DocumentItem = ({ doc, level, isActive, onSelect, onMenuClick, isDraggable = true }) => {
-    const paddingLeft = `${level * 16 + 28}px`;
+// ==========================================
+// 可编辑项组件 (Helper)
+// ==========================================
+const EditableLabel = ({
+    isRenaming,
+    value,
+    icon: Icon,
+    iconColor,
+    level,
+    isActive,
+    onClick,
+    onMenuClick,
+    onRename,
+    item,
+    type
+}) => {
+    const [tempValue, setTempValue] = useState(value);
 
+    // reset temp value when value changes or edit mode starts
+    React.useEffect(() => {
+        if (isRenaming) {
+            setTempValue(value);
+        }
+    }, [isRenaming, value]);
+
+    const handleCommit = () => {
+        if (tempValue.trim() && tempValue !== value) {
+            onRename(item.id, tempValue.trim(), type);
+        } else {
+            // Cancel or no change
+            onRename(item.id, null, type); // null indicates cancel/finish
+        }
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            handleCommit();
+        } else if (e.key === 'Escape') {
+            onRename(item.id, null, type);
+        }
+    };
+
+    const paddingLeft = `${level * 16 + (type === 'folder' ? 12 : 28)}px`;
+
+    // 如果正在重命名，显示输入框
+    if (isRenaming) {
+        return (
+            <div
+                className="flex items-center py-1.5 px-2 bg-blue-50"
+                style={{ paddingLeft }}
+            >
+                {Icon && <Icon size={14} className={`mr-2 ${iconColor} flex-shrink-0`} />}
+                <input
+                    type="text"
+                    value={tempValue}
+                    onChange={(e) => setTempValue(e.target.value)}
+                    onBlur={handleCommit}
+                    onKeyDown={handleKeyDown}
+                    className="flex-1 text-sm bg-white border border-blue-400 rounded px-1 py-0.5 outline-none focus:ring-2 focus:ring-blue-200"
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                />
+            </div>
+        );
+    }
+
+    // 常规显示
+    return (
+        <div
+            className={`flex items-center py-1.5 px-2 cursor-pointer hover:bg-gray-100 group ${isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600'}`}
+            style={{ paddingLeft }}
+            onClick={onClick}
+        >
+            {type === 'folder' ? (
+                // Folder specific icon logic handled by parent usually, but here we simplify or pass children?
+                // Wait, FolderItem struct is different (has toggle). 
+                // We should keep DocumentItem and FolderItem logic separate but use this helper or just inline it.
+                // Let's modify DocumentItem and FolderItem directly instead of generic wrapper to preserve specific layouts.
+                null
+            ) : (
+                <>
+                    <Icon size={14} className={`mr-2 ${iconColor} flex-shrink-0`} />
+                    <span className="flex-1 text-sm truncate select-none">{value || '无标题'}</span>
+                    {item.status === 'draft' && (
+                        <span className="text-xs text-gray-400 ml-1">草稿</span>
+                    )}
+                    <button
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded transition-opacity"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onMenuClick(e, item, type);
+                        }}
+                    >
+                        <MoreVertical size={14} />
+                    </button>
+                </>
+            )}
+        </div>
+    );
+};
+
+// ==========================================
+// 文档/表格项组件 (Updated)
+// ==========================================
+
+const DocumentItem = ({
+    doc,
+    level,
+    isActive,
+    onSelect,
+    onMenuClick,
+    isDraggable = true,
+    isRenaming = false,
+    onRename
+}) => {
+    const isSpreadsheet = doc.type === 'spreadsheet';
+    const Icon = isSpreadsheet ? FileSpreadsheet : FileText;
+    const iconColor = isSpreadsheet ? 'text-green-500' : 'text-gray-400';
+
+    // Rename Logic
+    const [tempValue, setTempValue] = useState(doc.title);
+    React.useEffect(() => {
+        if (isRenaming) setTempValue(doc.title);
+    }, [isRenaming, doc.title]);
+
+    const handleCommit = () => {
+        onRename(doc.id, tempValue.trim(), isSpreadsheet ? 'spreadsheet' : 'document');
+    };
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleCommit();
+        else if (e.key === 'Escape') onRename(doc.id, null); // Cancel
+    };
+
+    if (isRenaming) {
+        const paddingLeft = `${level * 16 + 28}px`;
+        return (
+            <div className="flex items-center py-1.5 px-2" style={{ paddingLeft }}>
+                <Icon size={14} className={`mr-2 ${iconColor} flex-shrink-0`} />
+                <input
+                    type="text"
+                    value={tempValue}
+                    onChange={(e) => setTempValue(e.target.value)}
+                    onBlur={handleCommit}
+                    onKeyDown={handleKeyDown}
+                    className="flex-1 text-sm bg-white border border-blue-500 rounded px-1.5 py-0.5 outline-none min-w-0"
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                />
+            </div>
+        );
+    }
+
+    const paddingLeft = `${level * 16 + 28}px`;
     const content = (
         <div
             className={`flex items-center py-1.5 px-2 cursor-pointer hover:bg-gray-100 group ${isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600'}`}
             style={{ paddingLeft }}
             onClick={() => onSelect(doc)}
         >
-            <FileText size={14} className="mr-2 text-gray-400 flex-shrink-0" />
+            <Icon size={14} className={`mr-2 ${iconColor} flex-shrink-0`} />
             <span className="flex-1 text-sm truncate select-none">{doc.title || '无标题'}</span>
             {doc.status === 'draft' && (
                 <span className="text-xs text-gray-400 ml-1">草稿</span>
             )}
-            {/* 更多按钮 */}
             <button
                 className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded transition-opacity"
                 onClick={(e) => {
                     e.stopPropagation();
-                    onMenuClick(e, doc, 'document');
+                    onMenuClick(e, doc, isSpreadsheet ? 'spreadsheet' : 'document');
                 }}
             >
                 <MoreVertical size={14} />
@@ -69,7 +218,7 @@ const DocumentItem = ({ doc, level, isActive, onSelect, onMenuClick, isDraggable
 
     if (isDraggable) {
         return (
-            <DraggableWrapper id={`doc-${doc.id}`} type="document">
+            <DraggableWrapper id={`${isSpreadsheet ? 'spreadsheet' : 'document'}-${doc.id}`} type={isSpreadsheet ? 'spreadsheet' : 'document'} itemId={doc.id}>
                 {content}
             </DraggableWrapper>
         );
@@ -79,7 +228,7 @@ const DocumentItem = ({ doc, level, isActive, onSelect, onMenuClick, isDraggable
 };
 
 // ==========================================
-// 文件夹项组件
+// 文件夹项组件 (Updated)
 // ==========================================
 
 const FolderItem = ({
@@ -95,53 +244,91 @@ const FolderItem = ({
     activeDocId,
     onSelectDocument,
     activeDropId,
-    isDraggable = true
+    isDraggable = true,
+    renamingItemId,
+    onRename
 }) => {
+    const isRenaming = renamingItemId === folder.id;
     const paddingLeft = `${level * 16 + 12}px`;
     const hasChildren = subFolders.length > 0 || folderDocs.length > 0;
     const isDropTarget = activeDropId === folder.id;
 
-    const folderContent = (
-        <div
-            className={`flex items-center py-2 px-2 cursor-pointer hover:bg-gray-100 group ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-gray-700'} ${isDropTarget ? 'ring-2 ring-blue-400 bg-blue-50' : ''}`}
-            style={{ paddingLeft }}
-            onClick={() => onSelect(folder)}
-        >
+    // Rename Logic for Folder
+    const [tempValue, setTempValue] = useState(folder.name);
+    React.useEffect(() => {
+        if (isRenaming) setTempValue(folder.name);
+    }, [isRenaming, folder.name]);
+
+    const handleCommit = () => {
+        onRename(folder.id, tempValue.trim(), 'folder');
+    };
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleCommit();
+        else if (e.key === 'Escape') onRename(folder.id, null);
+    };
+
+    let folderContent;
+    if (isRenaming) {
+        folderContent = (
+            <div className="flex items-center py-2 px-2" style={{ paddingLeft }}>
+                <div className="mr-1 w-3.5" />
+                <div className="mr-2 text-yellow-500">
+                    {isExpanded ? <FolderOpen size={18} /> : <Folder size={18} />}
+                </div>
+                <input
+                    type="text"
+                    value={tempValue}
+                    onChange={(e) => setTempValue(e.target.value)}
+                    onBlur={handleCommit}
+                    onKeyDown={handleKeyDown}
+                    className="flex-1 text-sm bg-white border border-blue-500 rounded px-1.5 py-0.5 outline-none min-w-0"
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                />
+            </div>
+        );
+    } else {
+        folderContent = (
             <div
-                className="mr-1 p-0.5 rounded hover:bg-gray-200 text-gray-400"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    if (hasChildren) onToggle(folder.id);
-                }}
+                className={`flex items-center py-2 px-2 cursor-pointer hover:bg-gray-100 group ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-gray-700'} ${isDropTarget ? 'ring-2 ring-blue-400 bg-blue-50' : ''}`}
+                style={{ paddingLeft }}
+                onClick={() => onSelect(folder)}
             >
-                {hasChildren ? (
-                    isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
-                ) : (
-                    <div className="w-3.5" />
-                )}
+                <div
+                    className="mr-1 p-0.5 rounded hover:bg-gray-200 text-gray-400"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (hasChildren) onToggle(folder.id);
+                    }}
+                >
+                    {hasChildren ? (
+                        isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+                    ) : (
+                        <div className="w-3.5" />
+                    )}
+                </div>
+
+                <div className="mr-2 text-yellow-500">
+                    {isExpanded ? <FolderOpen size={18} /> : <Folder size={18} />}
+                </div>
+
+                <span className="flex-1 text-sm truncate select-none">{folder.name}</span>
+
+                <button
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded transition-opacity"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onMenuClick(e, folder, 'folder');
+                    }}
+                >
+                    <MoreVertical size={14} />
+                </button>
             </div>
-
-            <div className="mr-2 text-yellow-500">
-                {isExpanded ? <FolderOpen size={18} /> : <Folder size={18} />}
-            </div>
-
-            <span className="flex-1 text-sm truncate select-none">{folder.name}</span>
-
-            {/* 更多按钮 */}
-            <button
-                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded transition-opacity"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onMenuClick(e, folder, 'folder');
-                }}
-            >
-                <MoreVertical size={14} />
-            </button>
-        </div>
-    );
+        );
+    }
 
     const wrappedContent = isDraggable ? (
-        <DraggableWrapper id={`folder-${folder.id}`} type="folder">
+        <DraggableWrapper id={`folder-${folder.id}`} type="folder" itemId={folder.id}>
             <DroppableFolder id={folder.id} isOver={isDropTarget}>
                 {folderContent}
             </DroppableFolder>
@@ -158,7 +345,6 @@ const FolderItem = ({
 
             {isExpanded && (
                 <>
-                    {/* 子文件夹 */}
                     {subFolders.map(sub => (
                         <FolderItem
                             key={sub.id}
@@ -175,9 +361,10 @@ const FolderItem = ({
                             onSelectDocument={onSelectDocument}
                             activeDropId={activeDropId}
                             isDraggable={isDraggable}
+                            renamingItemId={renamingItemId}
+                            onRename={onRename}
                         />
                     ))}
-                    {/* 文件夹下的文档 */}
                     {folderDocs.map(doc => (
                         <DocumentItem
                             key={doc.id}
@@ -187,6 +374,8 @@ const FolderItem = ({
                             onSelect={onSelectDocument}
                             onMenuClick={onMenuClick}
                             isDraggable={isDraggable}
+                            isRenaming={renamingItemId === doc.id}
+                            onRename={onRename}
                         />
                     ))}
                 </>
@@ -199,22 +388,6 @@ const FolderItem = ({
 // 主组件
 // ==========================================
 
-/**
- * 文件夹树组件
- * @param {Object} props
- * @param {Array} props.folders - 文件夹列表
- * @param {Array} props.documents - 文档列表
- * @param {string} props.selectedFolderId - 选中的文件夹 ID
- * @param {string} props.activeDocId - 当前文档 ID
- * @param {Function} props.onSelectFolder - 选择文件夹
- * @param {Function} props.onSelectDocument - 选择文档
- * @param {Function} props.onMenuClick - 菜单点击回调 (e, item, type: 'folder' | 'document')
- * @param {Function} props.onMoveItem - 移动项目回调 (itemId, itemType, targetFolderId)
- * @param {Function} props.onAction - 操作回调（兼容旧版）
- * @param {boolean} props.showHome - 是否显示主页
- * @param {Function} props.onSelectHome - 选择主页
- * @param {boolean} props.enableDragDrop - 是否启用拖拽
- */
 export default function FolderTree({
     folders,
     documents = [],
@@ -224,10 +397,12 @@ export default function FolderTree({
     onSelectDocument,
     onMenuClick,
     onMoveItem,
-    onAction, // 兼容旧版
+    onAction,
     showHome = false,
     onSelectHome,
-    enableDragDrop = true
+    enableDragDrop = true,
+    renamingItemId,
+    onRename
 }) {
     const [expandedIds, setExpandedIds] = useState(new Set());
     const [activeDropId, setActiveDropId] = useState(null);
@@ -299,8 +474,15 @@ export default function FolderTree({
     // 拖拽处理
     const handleDragStart = (event) => {
         const { active } = event;
-        const [type, id] = active.id.split('-');
-        setDraggedItem({ type, id, data: active.data.current });
+        // 优先从 data 中获取，避免 split 导致 UUID 被截断的问题
+        if (active.data?.current) {
+            const { type, id } = active.data.current;
+            setDraggedItem({ type, id, data: active.data.current });
+        } else {
+            // 降级处理
+            const [type, id] = active.id.split('-');
+            setDraggedItem({ type, id, data: active.data.current });
+        }
     };
 
     const handleDragOver = (event) => {
@@ -319,7 +501,18 @@ export default function FolderTree({
 
         if (!over || !onMoveItem) return;
 
-        const [itemType, itemId] = active.id.split('-');
+        let itemType, itemId;
+        // 优先从 data 中获取
+        if (active.data?.current) {
+            itemType = active.data.current.type;
+            itemId = active.data.current.id;
+        } else {
+            // 降级兼容：注意 split 对于 UUID 只取第一部分是错误的，这里尝试修复
+            const parts = active.id.split('-');
+            itemType = parts[0];
+            itemId = parts.slice(1).join('-'); // 重新拼接后续部分
+        }
+
         const targetFolderId = over.id === 'root' ? null : over.id;
 
         // 防止文件夹移动到自己或子文件夹
@@ -387,6 +580,8 @@ export default function FolderTree({
                         onSelectDocument={onSelectDocument}
                         activeDropId={activeDropId}
                         isDraggable={enableDragDrop}
+                        renamingItemId={renamingItemId}
+                        onRename={onRename}
                     />
                 ))}
 
@@ -400,6 +595,8 @@ export default function FolderTree({
                         onSelect={onSelectDocument}
                         onMenuClick={handleMenuClick}
                         isDraggable={enableDragDrop}
+                        isRenaming={renamingItemId === doc.id}
+                        onRename={onRename}
                     />
                 ))}
 
@@ -430,6 +627,11 @@ export default function FolderTree({
                                 <div className="flex items-center gap-2">
                                     <Folder size={14} className="text-yellow-500" />
                                     <span>移动文件夹</span>
+                                </div>
+                            ) : draggedItem.type === 'spreadsheet' ? (
+                                <div className="flex items-center gap-2">
+                                    <FileSpreadsheet size={14} className="text-green-500" />
+                                    <span>移动表格</span>
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-2">

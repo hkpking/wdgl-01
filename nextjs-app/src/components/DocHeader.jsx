@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants';
 import { uploadImage } from '@/lib/editor-utils';
-import * as mockStorage from '@/lib/storage';
+import * as mockStorage from '@/lib/services/mockStorage';
 import { useDocumentExport } from '@/hooks/useDocumentExport';
 import SettingsModal from './SettingsModal';
 

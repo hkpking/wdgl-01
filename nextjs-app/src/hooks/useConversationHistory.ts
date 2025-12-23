@@ -18,9 +18,13 @@ export interface SearchReference {
     title: string;
     chunk_text: string;
     similarity?: number;
+    type?: 'document' | 'spreadsheet';  // 结果类型
     metadata?: {
         title?: string;
         docId?: string;
+        type?: 'document' | 'spreadsheet';  // 也可能在 metadata 中
+        team_id?: string;
+        knowledge_base_id?: string;
     };
 }
 

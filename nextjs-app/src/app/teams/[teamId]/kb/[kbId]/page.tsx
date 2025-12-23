@@ -5,31 +5,38 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
     Plus, FolderPlus, FileText, ChevronRight, ChevronDown, ChevronLeft,
-    Loader2, Trash2, Clock, Search, Settings, Star, Share2, Save, PanelLeftClose, PanelLeft
+    Loader2, Trash2, Clock, Search, Settings, Star, Share2, Save, PanelLeftClose, PanelLeft, Sparkles
 } from 'lucide-react';
 import { useStorage } from '@/contexts/StorageContext';
 import { useGlobalSearch } from '@/hooks/useGlobalSearch';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useFolderManager } from '@/hooks/useFolderManager';
+import { useKBContent, useInvalidateKBContent } from '@/hooks/useKBContent';
 import AppSidebar from '@/components/layout/AppSidebar';
 import SearchModal from '@/components/shared/SearchModal';
 import CollaborationStatus from '@/components/shared/CollaborationStatus';
 import CollaborationToast, { useCollaborationToast } from '@/components/shared/CollaborationToast';
 import * as kbService from '@/lib/services/kbService';
 import * as teamService from '@/lib/services/teamService';
-import { getKBDocuments } from '@/lib/services/api/documentService';
+import { createSpreadsheet, getSpreadsheet, updateSpreadsheet, deleteSpreadsheet, moveSpreadsheet, type Spreadsheet } from '@/lib/services/spreadsheetService';
 import type { KnowledgeBase, KBFolder, TeamMemberRole } from '@/types/team';
+import { ContentItem } from '@/types/content';
+import { useQueryClient } from '@tanstack/react-query';
+import { contentKeys } from '@/hooks/useKBContent';
 import { getKBPermissions } from '@/types/team';
 import { DOC_STATUS } from '@/lib/constants';
 import { importWordDoc } from '@/lib/utils/ImportHandler';
 import FolderContextMenu from '@/components/FolderContextMenu';
+import { addRecentItem } from '@/components/shared/RecentDocs';
+import KBHomePanel from '@/components/KnowledgeBase/KBHomePanel';
+import DocOutlinePanel, { OutlineToggle } from '@/components/shared/DocOutlinePanel';
+import FocusMode, { FocusModeToggle, useFocusMode } from '@/components/shared/FocusMode';
 
-// 动态导入编辑器组件
-const DocHeader = dynamic(() => import('@/components/DocHeader'), { ssr: false });
-const DocToolbar = dynamic(() => import('@/components/DocToolbar'), { ssr: false });
-const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false });
-const AISidebar = dynamic(() => import('@/components/AI/AISidebar'), { ssr: false });
-const MagicCommand = dynamic(() => import('@/components/AI/MagicCommand'), { ssr: false });
+
+// 动态导入统一编辑器模块
+const DocumentEditorModule = dynamic(() => import('@/components/Editor/DocumentEditorModule'), { ssr: false });
+const SpreadsheetEditorModule = dynamic(() => import('@/components/Spreadsheet/SpreadsheetEditorModule'), { ssr: false });
+import { type SpreadsheetEditorHandle } from '@/components/Spreadsheet/SpreadsheetEditor';
 
 interface Document {
     id: string;
@@ -37,8 +44,9 @@ interface Document {
     content: string;
     status: string;
     folderId: string | null;
-    knowledgeBaseId: string | null;
-    teamId: string | null;
+    knowledgeBaseId?: string | null;
+    teamId?: string | null;
+    authorId?: string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -50,7 +58,7 @@ export default function KnowledgeBasePage() {
     const teamId = params.teamId as string;
     const kbId = params.kbId as string;
     const storageContext = useStorage() as any;
-    const { currentUser, loading: authLoading, saveDocument, getDocument, deleteDocument } = storageContext;
+    const { currentUser, loading: authLoading, saveDocument, getDocument, deleteDocument, getKBDocuments } = storageContext;
     const { isOpen: isSearchOpen, openSearch, closeSearch } = useGlobalSearch();
 
     // 文件夹管理（用于 AppSidebar）
@@ -60,9 +68,33 @@ export default function KnowledgeBasePage() {
     // 数据状态
     const [kb, setKb] = useState<KnowledgeBase | null>(null);
     const [folders, setFolders] = useState<KBFolder[]>([]);
-    const [documents, setDocuments] = useState<Document[]>([]);
     const [userRole, setUserRole] = useState<TeamMemberRole | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [isSysLoading, setIsSysLoading] = useState(true);
+
+    // React Query Hooks
+    const { data: allContent, isLoading: isContentLoading } = useKBContent({
+        knowledgeBaseId: kbId,
+        folderId: undefined, // explicitly undefined to fetch all items; ensures cache key matches handleOptimisticUpdate
+    });
+    // 修正: Hook 定义是 folderId?: string | null。如果传 null，会过滤 folder_id IS NULL (只取根目录)。如果不传 (undefined)，则取全部。
+    // 我们需要全部用于构建树。所以这里不传 folderId。
+    // 但是 useKBContent 的 TS 定义是 interface options。
+    // 我们修改一下调用：
+
+    const queryClient = useQueryClient();
+    const invalidateKBContent = useInvalidateKBContent();
+
+    // 乐观更新标题 helper
+    const handleOptimisticUpdate = (id: string, newTitle: string) => {
+        // 更新 allContent 缓存
+        queryClient.setQueryData(
+            contentKeys.list({ kbId, folderId: undefined }), // match the key used in useKBContent
+            (old: ContentItem[] | undefined) => {
+                if (!old) return old;
+                return old.map(item => item.id === id ? { ...item, title: newTitle } : item);
+            }
+        );
+    };
 
     // UI 状态
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -76,22 +108,39 @@ export default function KnowledgeBasePage() {
     const [contextMenu, setContextMenu] = useState<{
         x: number;
         y: number;
-        type: 'folder' | 'document';
+        type: 'folder' | 'document' | 'spreadsheet';
         item: any;
     } | null>(null);
-    const [renamingItem, setRenamingItem] = useState<{ id: string; type: 'folder' | 'document'; name: string } | null>(null);
+    const [renamingItem, setRenamingItem] = useState<{ id: string; type: 'folder' | 'document' | 'spreadsheet'; name: string } | null>(null);
     const [createSubfolderId, setCreateSubfolderId] = useState<string | null>(null);
 
-    // 编辑器状态
+    // 编辑器状态（部分为遗留状态，用于导入/插入功能）
     const [activeDocId, setActiveDocId] = useState<string | null>(null);
-    const [docTitle, setDocTitle] = useState('');
-    const [docContent, setDocContent] = useState('');
-    const [docStatus, setDocStatus] = useState(DOC_STATUS.DRAFT);
-    const [editorInstance, setEditorInstance] = useState<any>(null);
+    const [docTitle, setDocTitle] = useState(''); // 遗留：用于导入时设置标题
+    const [docContent, setDocContent] = useState(''); // 遗留：用于导入时设置内容
+    const [editorInstance, setEditorInstance] = useState<any>(null); // 遗留：用于导入/插入功能
     const [hasChanges, setHasChanges] = useState(false);
-    const [saving, setSaving] = useState(false);
     const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
     const [isMagicCommandOpen, setIsMagicCommandOpen] = useState(false);
+    const [isOutlinePanelOpen, setIsOutlinePanelOpen] = useState(true);
+    const focusMode = useFocusMode();
+
+    const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([]); // 兼容遗留类型，实际使用 allContent
+
+    const [activeSheetId, setActiveSheetId] = useState<string | null>(null);
+    const [sheetTitle, setSheetTitle] = useState('');
+    const [sheetInitialData, setSheetInitialData] = useState<any[]>([]);
+    const sheetDataRef = React.useRef<any[]>([]);
+    const [sheetHasChanges, setSheetHasChanges] = useState(false);
+    const [sheetSaving, setSheetSaving] = useState(false);
+    const [isSheetAIPanelOpen, setIsSheetAIPanelOpen] = useState(false);
+    const spreadsheetEditorRef = React.useRef<SpreadsheetEditorHandle>(null);
+    const sheetInitializedRef = React.useRef(false);
+
+    // 当前编辑类型
+    type EditingType = 'none' | 'document' | 'spreadsheet';
+    const [editingType, setEditingType] = useState<EditingType>('none');
+
 
     const permissions = getKBPermissions(userRole);
 
@@ -118,97 +167,75 @@ export default function KnowledgeBasePage() {
         return { ydoc, provider, user: collaborationUser };
     }, [activeDocId, ydoc, provider, collaborationUser, isConnected]);
 
-    // 从 URL 获取活动文档
+
+
+    // 从 URL 获取活动文档或表格
     useEffect(() => {
         const docId = searchParams.get('doc');
+        const sheetId = searchParams.get('sheet');
         if (docId && docId !== activeDocId) {
             loadDocument(docId);
+            setEditingType('document');
+        } else if (sheetId && sheetId !== activeSheetId) {
+            loadSpreadsheet(sheetId);
         }
     }, [searchParams]);
 
-    // 加载数据
+    // 处理 URL action 参数（从新建弹窗跳转过来）
+    useEffect(() => {
+        const action = searchParams.get('action');
+        if (action === 'new-doc' && currentUser?.uid && !isCreatingDoc) {
+            // 清除 action 参数
+            const url = new URL(window.location.href);
+            url.searchParams.delete('action');
+            window.history.replaceState({}, '', url.toString());
+            // 创建文档
+            handleCreateDoc();
+        } else if (action === 'new-sheet' && currentUser?.uid) {
+            // 清除 action 参数
+            const url = new URL(window.location.href);
+            url.searchParams.delete('action');
+            window.history.replaceState({}, '', url.toString());
+            // 创建表格并跳转
+            handleCreateSpreadsheet();
+        }
+    }, [searchParams, currentUser?.uid, teamId, kbId]);
+
+    // 加载元数据 (KB info, Folders, Role)
     useEffect(() => {
         if (kbId && teamId && currentUser?.uid) {
-            loadData();
+            loadMetadata();
         }
     }, [kbId, teamId, currentUser?.uid]);
 
-    const loadData = async () => {
+    const loadMetadata = async () => {
         if (!kbId || !teamId || !currentUser?.uid) return;
-        setLoading(true);
+        setIsSysLoading(true);
         try {
-            const [kbData, foldersData, docsData, role] = await Promise.all([
+            const [kbData, foldersData, role] = await Promise.all([
                 kbService.getKnowledgeBase(kbId),
                 kbService.getKBFolders(kbId),
-                getKBDocuments(kbId),
                 teamService.getUserRoleInTeam(teamId, currentUser.uid)
             ]);
             setKb(kbData);
             setFolders(foldersData);
-            setDocuments(docsData);
             setUserRole(role);
         } catch (error) {
             console.error('加载知识库数据失败:', error);
         } finally {
-            setLoading(false);
+            setIsSysLoading(false);
         }
     };
 
-    // 加载单个文档
-    const loadDocument = async (docId: string) => {
-        if (!currentUser?.uid) return;
-        const doc = await getDocument(currentUser.uid, docId);
-        if (doc) {
-            setActiveDocId(docId);
-            setDocTitle(doc.title);
-            setDocContent(doc.content);
-            setDocStatus(doc.status);
-            setHasChanges(false);
-        }
+    // 加载单个文档 - 统一使用 documents 表
+    // 加载文档 - DocumentEditorModule 会根据 documentId 自动加载
+    const loadDocument = (docId: string) => {
+        setActiveDocId(docId);
+        setHasChanges(false);
     };
 
-    // 保存文档
-    const handleSave = useCallback(async () => {
-        if (!activeDocId || !hasChanges || !currentUser?.uid) return;
-        setSaving(true);
-        try {
-            await saveDocument(currentUser.uid, activeDocId, {
-                title: docTitle,
-                content: docContent,
-                status: docStatus,
-                knowledgeBaseId: kbId,
-                teamId: teamId,
-            });
-            setHasChanges(false);
-            // 更新文档列表
-            setDocuments(prev => prev.map(d =>
-                d.id === activeDocId ? { ...d, title: docTitle, updatedAt: new Date().toISOString() } : d
-            ));
-        } catch (error) {
-            console.error('保存失败:', error);
-        } finally {
-            setSaving(false);
-        }
-    }, [activeDocId, docTitle, docContent, docStatus, hasChanges, currentUser?.uid, kbId, teamId]);
-
-    // 键盘快捷键
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault();
-                handleSave();
-            }
-        };
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [handleSave]);
-
-    // 自动保存
-    useEffect(() => {
-        if (!hasChanges) return;
-        const timer = setTimeout(handleSave, 30000);
-        return () => clearTimeout(timer);
-    }, [hasChanges, handleSave]);
+    // NOTE: 保存逻辑现在由 DocumentEditorModule 内部处理
+    // 通过 onSaveSuccess 回调同步列表更新
 
     // 导入 Word 文档
     const handleImport = async (file: File) => {
@@ -251,7 +278,7 @@ export default function KnowledgeBasePage() {
         }
     };
 
-    // 创建文档
+    // 创建文档 - 统一使用 documents 表，通过 knowledgeBaseId 关联到知识库
     const handleCreateDoc = async () => {
         if (!currentUser?.uid || isCreatingDoc) return;
         setIsCreatingDoc(true);
@@ -267,9 +294,10 @@ export default function KnowledgeBasePage() {
             };
             const savedDoc = await saveDocument(currentUser.uid, null, newDoc);
             if (savedDoc?.id) {
-                // 更新列表并打开文档
-                setDocuments(prev => [savedDoc, ...prev]);
-                openDoc(savedDoc.id);
+                // 刷新列表
+                invalidateKBContent(kbId);
+                // 打开文档
+                openDoc(savedDoc.id, savedDoc);
             }
         } catch (error) {
             console.error('创建文档失败:', error);
@@ -279,12 +307,171 @@ export default function KnowledgeBasePage() {
         }
     };
 
+    // 创建表格
+    const handleCreateSpreadsheet = async () => {
+        if (!currentUser?.uid) return;
+        try {
+            const sheet = await createSpreadsheet(currentUser.uid, {
+                title: '无标题表格',
+                teamId: teamId,
+                knowledgeBaseId: kbId,
+                folderId: selectedFolderId || undefined
+            });
+            if (sheet?.id) {
+                // 刷新列表
+                invalidateKBContent(kbId);
+                // 在本页面打开表格
+                openSheet(sheet.id, sheet);
+            }
+        } catch (error) {
+            console.error('创建表格失败:', error);
+            alert('创建表格失败');
+        }
+    };
+
+    // 打开表格
+    const openSheet = async (sheetId: string, preloadedSheet?: Spreadsheet) => {
+        // 边界情况：检查当前文档是否有未保存更改
+        if (activeDocId && hasChanges) {
+            if (!confirm('当前文档有未保存的更改，确定要切换吗？')) return;
+        }
+        // 边界情况：检查当前表格是否有未保存更改
+        if (activeSheetId && activeSheetId !== sheetId && sheetHasChanges) {
+            if (!confirm('当前表格有未保存的更改，确定要切换吗？')) return;
+        }
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('sheet', sheetId);
+        url.searchParams.delete('doc');
+        window.history.pushState({}, '', url.toString());
+
+        if (preloadedSheet) {
+            setActiveSheetId(sheetId);
+            setSheetTitle(preloadedSheet.title);
+            setSheetInitialData(preloadedSheet.data || []);
+            sheetDataRef.current = preloadedSheet.data || [];
+            setSheetHasChanges(false);
+            setEditingType('spreadsheet');
+            setActiveDocId(null);
+
+            setTimeout(() => {
+                sheetInitializedRef.current = true;
+            }, 500);
+        } else {
+            await loadSpreadsheet(sheetId);
+        }
+        // 关闭文档编辑
+        setActiveDocId(null);
+        setHasChanges(false);
+
+        // 记录最近访问
+        const sheet = spreadsheets.find(s => s.id === sheetId);
+        if (sheet) {
+            addRecentItem({
+                id: sheetId,
+                title: sheet.title,
+                type: 'spreadsheet',
+                teamId,
+                kbId,
+                path: `/teams/${teamId}/kb/${kbId}?sheet=${sheetId}`
+            });
+        }
+    };
+
+    // 加载表格
+    const loadSpreadsheet = async (sheetId: string) => {
+        const sheet = await getSpreadsheet(sheetId);
+        if (sheet) {
+            // 🔍 加载诊断
+            const firstSheet = sheet.data?.[0];
+            let nonNullCount = 0;
+            if (firstSheet?.data) {
+                for (const row of firstSheet.data) {
+                    if (row) {
+                        for (const cell of row) {
+                            if (cell !== null && cell !== undefined) nonNullCount++;
+                        }
+                    }
+                }
+            }
+            console.log('[知识库表格] 加载诊断:', {
+                id: sheet.id,
+                title: sheet.title,
+                dataLength: sheet.data?.length,
+                firstSheetKeys: firstSheet ? Object.keys(firstSheet) : [],
+                dataRows: firstSheet?.data?.length || 0,
+                nonNullCellCount: nonNullCount,
+                sampleCell: JSON.stringify(firstSheet?.data?.[0]?.[0])?.slice(0, 80)
+            });
+
+            // 重置初始化标记
+            sheetInitializedRef.current = false;
+            setActiveSheetId(sheetId);
+            setSheetTitle(sheet.title);
+            setSheetInitialData(sheet.data || []);
+            sheetDataRef.current = sheet.data || [];
+            setSheetHasChanges(false);
+            setEditingType('spreadsheet');
+            // 关闭文档编辑
+            setActiveDocId(null);
+
+            // 延迟标记初始化完成，让 FortuneSheet 有时间触发初始化事件
+            setTimeout(() => {
+                sheetInitializedRef.current = true;
+                console.log('[知识库表格] 初始化完成，开始跟踪变更');
+            }, 500);
+        }
+    };
+
+
+    // 关闭表格
+    const closeSheet = () => {
+        if (sheetHasChanges && !confirm('您有未保存的更改，确定要关闭吗？')) return;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('sheet');
+        window.history.pushState({}, '', url.toString());
+        setActiveSheetId(null);
+        setSheetTitle('');
+        setSheetInitialData([]);
+        sheetDataRef.current = [];
+        setSheetHasChanges(false);
+        setEditingType('none');
+    };
+
     // 打开文档
-    const openDoc = (docId: string) => {
+    const openDoc = (docId: string, preloadedDoc?: Document) => {
+        // 边界情况：检查当前文档是否有未保存更改
+        if (activeDocId && activeDocId !== docId && hasChanges) {
+            if (!confirm('当前文档有未保存的更改，确定要切换吗？')) return;
+        }
+        // 边界情况：检查当前表格是否有未保存更改
+        if (activeSheetId && sheetHasChanges) {
+            if (!confirm('当前表格有未保存的更改，确定要切换吗？')) return;
+        }
+
         const url = new URL(window.location.href);
         url.searchParams.set('doc', docId);
+        url.searchParams.delete('sheet');
         window.history.pushState({}, '', url.toString());
         loadDocument(docId);
+        setEditingType('document');
+        // 关闭表格编辑
+        setActiveSheetId(null);
+        setSheetHasChanges(false);
+
+        // 记录最近访问
+        // allContent 可能没有 content 字段，但 RecentDocs 只需要 title 等元数据
+        const doc = preloadedDoc || (allContent || []).find(d => d.id === docId);
+        if (doc) {
+            addRecentItem({
+                id: docId,
+                title: doc.title,
+                type: 'document',
+                teamId,
+                kbId,
+                path: `/teams/${teamId}/kb/${kbId}?doc=${docId}`
+            });
+        }
     };
 
     // 关闭文档
@@ -297,6 +484,7 @@ export default function KnowledgeBasePage() {
         setDocTitle('');
         setDocContent('');
         setHasChanges(false);
+        setEditingType('none');
     };
 
     // 删除文档
@@ -305,9 +493,30 @@ export default function KnowledgeBasePage() {
         if (!confirm('确定要删除此文档吗？')) return;
         const success = await deleteDocument(currentUser.uid, docId);
         if (success) {
-            setDocuments(prev => prev.filter(d => d.id !== docId));
+            invalidateKBContent(kbId);
+            // 如果删除的是当前打开的文档，直接清空右侧（无需再次确认）
             if (activeDocId === docId) {
-                closeDoc();
+                const url = new URL(window.location.href);
+                url.searchParams.delete('doc');
+                window.history.pushState({}, '', url.toString());
+                setActiveDocId(null);
+                setDocTitle('');
+                setDocContent('');
+                setHasChanges(false);
+                setEditingType('none');
+            }
+        }
+    };
+
+    // 删除表格
+    const handleDeleteSpreadsheet = async (sheetId: string, e: React.MouseEvent | { stopPropagation: () => void }) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        if (!confirm('确定要删除此表格吗？')) return;
+        const success = await deleteSpreadsheet(sheetId);
+        if (success) {
+            invalidateKBContent(kbId);
+            if (activeSheetId === sheetId) {
+                closeSheet();
             }
         }
     };
@@ -322,8 +531,64 @@ export default function KnowledgeBasePage() {
         }
     };
 
+    // State for inline renaming
+    const [renamingItemId, setRenamingItemIdState] = useState<string | null>(null);
+
+    // 统一重命名处理 (Inline)
+    const handleRenameItem = async (id: string, newName: string | null, type: 'folder' | 'document' | 'spreadsheet') => {
+        // null implies cancel or no change
+        if (newName === null) {
+            setRenamingItemIdState(null);
+            return;
+        }
+
+        // 1. 立即进行乐观更新 (Optimistic Update)
+        handleOptimisticUpdate(id, newName);
+
+        // 2. 如果正在编辑该项，同步更新编辑器标题
+        if (activeDocId === id && type === 'document') {
+            setDocTitle(newName);
+        } else if (activeSheetId === id && type === 'spreadsheet') {
+            setSheetTitle(newName);
+            // 确保 SpreadSheetEditorModule 也能收到更新 (通过 useEffect监听 props)
+        }
+
+        // 3. 执行异步保存
+        let success = false;
+        if (type === 'folder') {
+            const updated = await kbService.updateKBFolder(id, { name: newName });
+            success = !!updated;
+        } else if (type === 'spreadsheet') {
+            const updated = await updateSpreadsheet(id, { title: newName });
+            success = !!updated;
+        } else {
+            const updated = await saveDocument(currentUser.uid, id, { title: newName });
+            success = !!updated;
+        }
+
+        // 4. 保存结果处理
+        if (success) {
+            invalidateKBContent(kbId);
+            // 还需要刷新文件夹列表，因文件夹结构可能变化 (虽然 optimistic update 处理了名字，但 tree structure cache 也许不同)
+            // kbService is separate? No, folders is separate state `folders`.
+            // We should also optimistically update `folders` state if it's a folder.
+            if (type === 'folder') {
+                setFolders(prev => prev.map(f => f.id === id ? { ...f, name: newName } : f));
+            }
+        } else {
+            // 回滚/失效
+            invalidateKBContent(kbId);
+            if (type === 'folder') {
+                // Relfetch folders
+                const foldersData = await kbService.getKBFolders(kbId);
+                setFolders(foldersData);
+            }
+        }
+        setRenamingItemIdState(null);
+    };
+
     // 菜单点击处理
-    const handleMenuClick = (e: React.MouseEvent, item: any, type: 'folder' | 'document' | 'create-folder') => {
+    const handleMenuClick = (e: React.MouseEvent, item: any, type: 'folder' | 'document' | 'spreadsheet' | 'create-folder') => {
         if (type === 'create-folder') {
             handleCreateFolder();
             return;
@@ -336,23 +601,8 @@ export default function KnowledgeBasePage() {
         });
     };
 
-    // 重命名文件夹
-    const handleRenameFolder = async (folderId: string, newName: string) => {
-        const updated = await kbService.updateKBFolder(folderId, { name: newName });
-        if (updated) {
-            setFolders(prev => prev.map(f => f.id === folderId ? { ...f, name: newName } : f));
-        }
-        setRenamingItem(null);
-    };
-
-    // 重命名文档
-    const handleRenameDocument = async (docId: string, newTitle: string) => {
-        const updated = await kbService.updateKBDocument(docId, { title: newTitle });
-        if (updated) {
-            setDocuments(prev => prev.map(d => d.id === docId ? { ...d, title: newTitle } : d));
-        }
-        setRenamingItem(null);
-    };
+    // Removed handleRenameFolder and handleRenameDocument as they are now consolidated above.
+    // Keeping handleDeleteFolder below.
 
     // 删除文件夹
     const handleDeleteFolder = async (folderId: string) => {
@@ -360,26 +610,38 @@ export default function KnowledgeBasePage() {
         const success = await kbService.deleteKBFolder(folderId);
         if (success) {
             setFolders(prev => prev.filter(f => f.id !== folderId));
-            // 将该文件夹下的文档移到根目录
-            const docsInFolder = documents.filter(d => d.folderId === folderId);
+            // 将该文件夹下的文档移到根目录 - 统一使用 documents 表
+            // 现在的逻辑：后端删除文件夹时应该处理这些，或者前端单独处理。
+            // 使用 allContent 过滤
+            const docsInFolder = (allContent || []).filter(d => d.folderId === folderId);
             for (const doc of docsInFolder) {
-                await kbService.updateKBDocument(doc.id, { folderId: null });
+                if (doc.type === 'document') {
+                    await saveDocument(currentUser.uid, doc.id, { folderId: null });
+                } else if (doc.type === 'spreadsheet') {
+                    await updateSpreadsheet(doc.id, { folderId: null });
+                }
             }
-            setDocuments(prev => prev.map(d => d.folderId === folderId ? { ...d, folderId: null } : d));
+            invalidateKBContent(kbId);
         }
     };
 
     // 移动项目（拖拽）
     const handleMoveItem = async (itemId: string, itemType: string, targetFolderId: string | null) => {
         if (itemType === 'document') {
-            const updated = await kbService.updateKBDocument(itemId, { folderId: targetFolderId });
+            // 统一使用 documents 表
+            const updated = await saveDocument(currentUser.uid, itemId, { folderId: targetFolderId });
             if (updated) {
-                setDocuments(prev => prev.map(d => d.id === itemId ? { ...d, folderId: targetFolderId } : d));
+                invalidateKBContent(kbId);
             }
         } else if (itemType === 'folder') {
             const updated = await kbService.moveKBFolder(itemId, targetFolderId);
             if (updated) {
                 setFolders(prev => prev.map(f => f.id === itemId ? { ...f, parentId: targetFolderId } : f));
+            }
+        } else if (itemType === 'spreadsheet') {
+            const success = await moveSpreadsheet(itemId, targetFolderId);
+            if (success) {
+                invalidateKBContent(kbId);
             }
         }
     };
@@ -410,12 +672,17 @@ export default function KnowledgeBasePage() {
         return folders.filter(f => f.parentId === parentId);
     };
 
-    // 最近更新的文档
-    const recentDocs = [...documents]
+    // React Query 已经返回统一列表
+    const allItems = useMemo(() => {
+        return allContent || [];
+    }, [allContent]);
+
+    // 最近更新的文档和表格
+    const recentDocs = [...allItems]
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
         .slice(0, 10);
 
-    if (authLoading || loading) {
+    if (authLoading || isSysLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -437,7 +704,7 @@ export default function KnowledgeBasePage() {
         const hasChildren = children.length > 0;
         const isExpanded = expandedFolders.has(folder.id);
         const isSelected = selectedFolderId === folder.id;
-        const folderDocs = documents.filter(d => d.folderId === folder.id);
+        const folderItems = allItems.filter(d => d.folderId === folder.id);
 
         return (
             <div key={folder.id}>
@@ -446,8 +713,8 @@ export default function KnowledgeBasePage() {
                         }`}
                     style={{ paddingLeft: `${level * 12 + 8}px` }}
                 >
-                    <button onClick={() => (hasChildren || folderDocs.length > 0) && toggleFolderExpand(folder.id)} className="p-0.5">
-                        {(hasChildren || folderDocs.length > 0) ? (
+                    <button onClick={() => (hasChildren || folderItems.length > 0) && toggleFolderExpand(folder.id)} className="p-0.5">
+                        {(hasChildren || folderItems.length > 0) ? (
                             isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
                         ) : (
                             <span className="w-3.5" />
@@ -464,16 +731,21 @@ export default function KnowledgeBasePage() {
                 {isExpanded && (
                     <>
                         {children.map(child => renderFolderNode(child, level + 1))}
-                        {folderDocs.map(doc => (
+                        {folderItems.map(item => (
                             <div
-                                key={doc.id}
-                                onClick={() => openDoc(doc.id)}
-                                className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded cursor-pointer group ${activeDocId === doc.id ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                                key={item.id}
+                                onClick={() => item.type === 'spreadsheet' ? openSheet(item.id) : openDoc(item.id)}
+                                className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded cursor-pointer group ${(item.type === 'document' && activeDocId === item.id) || (item.type === 'spreadsheet' && activeSheetId === item.id)
+                                    ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
                                     }`}
                                 style={{ paddingLeft: `${(level + 1) * 12 + 24}px` }}
                             >
-                                <FileText size={12} className="text-gray-400 flex-shrink-0" />
-                                <span className="truncate flex-1">{doc.title}</span>
+                                {item.type === 'spreadsheet' ? (
+                                    <span className="text-green-500 mr-0.5 text-xs">📊</span> // 简单图标区分
+                                ) : (
+                                    <FileText size={12} className="text-gray-400 flex-shrink-0" />
+                                )}
+                                <span className="truncate flex-1">{item.title}</span>
                             </div>
                         ))}
                     </>
@@ -495,15 +767,25 @@ export default function KnowledgeBasePage() {
                     mode="knowledgeBase"
                     kb={kb}
                     kbFolders={folders}
-                    kbDocuments={documents}
-                    activeKBDocId={activeDocId}
+                    kbDocuments={allItems}
+                    activeKBDocId={activeDocId || activeSheetId}
                     selectedFolderId={selectedFolderId}
                     onSelectFolder={setSelectedFolderId}
-                    onSelectKBDoc={openDoc}
-                    onSelectKBHome={() => setActiveDocId(null)}
+                    onSelectKBDoc={(id) => {
+                        // 判断是文档还是表格
+                        const item = allItems.find(i => i.id === id);
+                        if (item?.type === 'spreadsheet') {
+                            openSheet(id);
+                        } else {
+                            openDoc(id);
+                        }
+                    }}
+                    onSelectKBHome={() => { setActiveDocId(null); setActiveSheetId(null); setEditingType('none'); }}
                     onMenuClick={handleMenuClick}
                     onMoveItem={handleMoveItem}
                     onCollapse={() => setSidebarCollapsed(true)}
+                    renamingItemId={renamingItemId}
+                    onRenameItem={handleRenameItem}
                 />
             )}
 
@@ -521,164 +803,76 @@ export default function KnowledgeBasePage() {
             {/* 右侧主内容 */}
             <main className="flex-1 flex flex-col overflow-hidden">
                 {activeDocId ? (
-                    /* 编辑器模式 */
-                    <>
-                        {/* 编辑器头部 */}
-                        <DocHeader
-                            title={docTitle}
-                            setTitle={(t: string) => { setDocTitle(t); setHasChanges(true); }}
-                            status={docStatus}
-                            saving={saving}
-                            lastSaved={null}
-                            onBack={closeDoc}
-                            onShare={() => { }}
-                            editor={editorInstance}
-                            onOpenVersionHistory={() => { }}
-                            onImport={handleImport}
-                            onInsertBlock={handleInsertBlock}
-                            content={docContent}
-                        />
-
-                        {/* 工具栏 */}
-                        <DocToolbar
-                            editor={editorInstance}
-                            onSave={handleSave}
-                            onAI={() => setIsAISidebarOpen(!isAISidebarOpen)}
-                            onComment={() => { }}
-                            onMagicCommand={() => setIsMagicCommandOpen(true)}
-                        />
-
-                        {/* 编辑区域 */}
-                        <div className="flex-1 flex overflow-hidden">
-                            <div className="flex-1 overflow-auto bg-white">
-                                <div className="max-w-4xl mx-auto px-8 py-12">
-                                    <RichTextEditor
-                                        content={docContent}
-                                        onChange={(c: string) => { setDocContent(c); setHasChanges(true); }}
-                                        onEditorReady={setEditorInstance}
-                                        editable={permissions.canEditDoc}
-                                        collaboration={collaboration}
-                                        placeholder="开始编写文档..."
-                                    />
-                                </div>
-                            </div>
-
-                            {/* AI 侧边栏 */}
-                            {isAISidebarOpen && (
-                                <AISidebar
-                                    isOpen={isAISidebarOpen}
-                                    onClose={() => setIsAISidebarOpen(false)}
-                                    documentTitle={docTitle}
-                                    documentContent={docContent}
-                                    currentUser={currentUser}
-                                    knowledgeBaseId={kbId}
-                                    searchScope="knowledgeBase"
-                                    onInsertContent={(text: string) => {
-                                        if (editorInstance) {
-                                            editorInstance.commands.insertContent(text);
-                                            setHasChanges(true);
-                                        }
-                                    }}
-                                />
-                            )}
-                        </div>
-
-                        {/* Magic Command */}
-                        {isMagicCommandOpen && editorInstance && (
-                            <MagicCommand
-                                editor={editorInstance}
-                                onClose={() => setIsMagicCommandOpen(false)}
-                            />
-                        )}
-
-                        {/* 协作状态 */}
-                        {collaboration && (
-                            <div className="fixed top-16 right-4 z-30">
-                                <CollaborationStatus
-                                    users={connectedUsers || []}
-                                    isConnected={isConnected}
-                                    onReconnect={reconnect}
-                                />
-                            </div>
-                        )}
-
-                        {/* 协作通知 */}
-                        <CollaborationToast toasts={toasts} onDismiss={dismissToast} />
-                    </>
+                    /* 文档编辑器模式 - 使用统一模块（自加载数据） */
+                    <DocumentEditorModule
+                        key={activeDocId}
+                        documentId={activeDocId}
+                        initialDocument={allItems.find(d => d.id === activeDocId) as any}
+                        currentUser={currentUser}
+                        mode="embedded"
+                        showBackButton={true}
+                        onBack={closeDoc}
+                        knowledgeBaseId={kbId}
+                        teamId={teamId}
+                        onDirtyChange={setHasChanges}
+                        onTitleChange={(newTitle) => {
+                            // 乐观更新
+                            if (activeDocId) {
+                                handleOptimisticUpdate(activeDocId, newTitle);
+                            }
+                        }}
+                        onSaveSuccess={(doc) => {
+                            // 刷新列表
+                            invalidateKBContent(kbId);
+                        }}
+                    />
+                ) : activeSheetId ? (
+                    /* 表格编辑器模式 - 使用统一模块 */
+                    <SpreadsheetEditorModule
+                        key={activeSheetId}
+                        spreadsheetId={activeSheetId}
+                        initialSpreadsheet={{
+                            id: activeSheetId,
+                            title: sheetTitle,
+                            data: sheetInitialData,
+                            status: 'active',
+                            userId: currentUser?.uid || '',
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                            teamId: teamId,
+                            knowledgeBaseId: kbId,
+                            folderId: null
+                        }}
+                        userId={currentUser?.uid || ''}
+                        currentUser={currentUser}
+                        mode="embedded"
+                        showBackButton={true}
+                        onBack={closeSheet}
+                        onDirtyChange={setSheetHasChanges}
+                        onTitleChange={(newTitle) => {
+                            setSheetTitle(newTitle);
+                            // 乐观更新列表
+                            if (activeSheetId) {
+                                handleOptimisticUpdate(activeSheetId, newTitle);
+                            }
+                        }}
+                        onSaveSuccess={(data) => {
+                            invalidateKBContent(kbId);
+                        }}
+                    />
                 ) : (
-                    /* 知识库首页模式 */
-                    <>
-                        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-                            <span className="text-sm text-gray-500">知识库主页</span>
-                            <div className="flex items-center gap-2">
-                                <button className="p-2 text-gray-400 hover:text-gray-600"><Star size={16} /></button>
-                                <button className="p-2 text-gray-400 hover:text-gray-600"><Share2 size={16} /></button>
-                                <button className="p-2 text-gray-400 hover:text-gray-600"><Settings size={16} /></button>
-                            </div>
-                        </header>
-
-                        <div className="flex-1 overflow-auto p-6">
-                            {/* 知识库信息 */}
-                            <div className="flex items-center gap-4 mb-8">
-                                <div className="w-14 h-14 bg-yellow-100 rounded-xl flex items-center justify-center text-3xl">
-                                    {kb.icon}
-                                </div>
-                                <div>
-                                    <h2 className="text-2xl font-bold text-gray-900">{kb.name}</h2>
-                                    <p className="text-gray-500">{kb.description || ''}</p>
-                                </div>
-                            </div>
-
-                            {/* 最近更新 */}
-                            <div>
-                                <h3 className="text-sm font-medium text-gray-700 mb-4">最近更新</h3>
-                                <div className="bg-white rounded-lg border border-gray-200">
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="text-left text-xs text-gray-500 border-b">
-                                                <th className="px-4 py-3 font-medium">名称</th>
-                                                <th className="px-4 py-3 font-medium">更新时间</th>
-                                                <th className="px-4 py-3 font-medium w-10"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {recentDocs.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={3} className="px-4 py-12 text-center text-gray-400">
-                                                        暂无文档，点击左侧「新建」创建第一个文档
-                                                    </td>
-                                                </tr>
-                                            ) : (
-                                                recentDocs.map(doc => (
-                                                    <tr
-                                                        key={doc.id}
-                                                        onClick={() => openDoc(doc.id)}
-                                                        className="hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 group"
-                                                    >
-                                                        <td className="px-4 py-3 flex items-center gap-2">
-                                                            <FileText size={16} className="text-gray-400" />
-                                                            <span className="font-medium text-gray-900">{doc.title}</span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-gray-500">
-                                                            {formatDate(doc.updatedAt)}
-                                                        </td>
-                                                        <td className="px-4 py-3">
-                                                            <button
-                                                                onClick={(e) => handleDeleteDoc(doc.id, e)}
-                                                                className="p-1 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-red-600"
-                                                            >
-                                                                <Trash2 size={14} />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </>
+                    /* 知识库首页模式 - 使用拆分组件 */
+                    <KBHomePanel
+                        kb={kb}
+                        recentItems={recentDocs}
+                        onOpenDoc={openDoc}
+                        onOpenSheet={openSheet}
+                        onDeleteDoc={handleDeleteDoc}
+                        onDeleteSheet={handleDeleteSpreadsheet}
+                        onCreateDoc={handleCreateDoc}
+                        onCreateSpreadsheet={handleCreateSpreadsheet}
+                        formatDate={formatDate}
+                    />
                 )}
             </main>
 
@@ -700,22 +894,15 @@ export default function KnowledgeBasePage() {
                     type={contextMenu.type}
                     onClose={() => setContextMenu(null)}
                     onRename={() => {
-                        const newName = prompt(
-                            contextMenu.type === 'folder' ? '请输入新的文件夹名称：' : '请输入新的文档标题：',
-                            contextMenu.item?.name || contextMenu.item?.title
-                        );
-                        if (newName?.trim()) {
-                            if (contextMenu.type === 'folder') {
-                                handleRenameFolder(contextMenu.item.id, newName.trim());
-                            } else {
-                                handleRenameDocument(contextMenu.item.id, newName.trim());
-                            }
-                        }
+                        // Start Inline Rename
+                        setRenamingItemIdState(contextMenu.item.id);
                         setContextMenu(null);
                     }}
                     onDelete={() => {
                         if (contextMenu.type === 'folder') {
                             handleDeleteFolder(contextMenu.item.id);
+                        } else if (contextMenu.type === 'spreadsheet') {
+                            handleDeleteSpreadsheet(contextMenu.item.id, { stopPropagation: () => { } } as any);
                         } else {
                             handleDeleteDoc(contextMenu.item.id, { stopPropagation: () => { } } as any);
                         }

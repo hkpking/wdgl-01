@@ -24,7 +24,19 @@ export default function ReferencePanel({
 
     const handleDocumentClick = (ref: SearchReference) => {
         const docId = ref.document_id || ref.metadata?.docId || ref.id;
-        router.push(`/editor/${docId}`);
+        const isSpreadsheet = ref.type === 'spreadsheet' || ref.metadata?.type === 'spreadsheet';
+        const teamId = ref.metadata?.team_id;
+        const kbId = ref.metadata?.knowledge_base_id;
+
+        // 如果有知识库信息，跳转到知识库页面（保持左侧导航 + 右侧编辑的体验）
+        if (teamId && kbId) {
+            const queryParam = isSpreadsheet ? 'sheet' : 'doc';
+            router.push(`/teams/${teamId}/kb/${kbId}?${queryParam}=${docId}`);
+        } else {
+            // 回退到单独的编辑器页面
+            const basePath = isSpreadsheet ? '/spreadsheet' : '/editor';
+            router.push(`${basePath}/${docId}`);
+        }
     };
 
     // 格式化时间

@@ -1,0 +1,480 @@
+# WDGL-01 架构图 Mermaid 源码
+# ================================
+# 复制下方代码到 https://mermaid.live 生成图表
+
+
+# ========================================
+# 1. 系统全景架构图
+# ========================================
+
+graph TB
+    subgraph Client["🖥️ 客户端层"]
+        Browser["浏览器"]
+    end
+
+    subgraph Frontend["⚛️ Next.js 前端应用"]
+        subgraph Pages["📄 页面路由"]
+            Login["/login<br/>登录页"]
+            Dashboard["/dashboard<br/>首页(问AI)"]
+            Editor["/editor/[id]<br/>文档编辑器"]
+            Spreadsheet["/spreadsheet/[id]<br/>表格编辑器"]
+            Teams["/teams<br/>团队管理"]
+            TeamKB["/teams/[teamId]/kb/[kbId]<br/>知识库"]
+        end
+
+        subgraph Components["🧩 核心组件"]
+            AppSidebar["AppSidebar<br/>全局导航侧边栏"]
+            RichTextEditor["RichTextEditor<br/>富文本编辑器(TipTap)"]
+            SpreadsheetEditor["SpreadsheetEditor<br/>表格编辑器(FortuneSheet)"]
+            AIComponents["AIQueryPanel / AISidebar<br/>AI对话组件"]
+            DocHeader["DocHeader<br/>文档标题栏"]
+            FolderTree["FolderTree<br/>目录树"]
+        end
+
+        subgraph Hooks["🪝 业务 Hooks"]
+            useAutoSave["useAutoSave"]
+            useCollaboration["useCollaboration"]
+            useComments["useComments"]
+            useVersionHistory["useVersionHistory"]
+            useDocumentExport["useDocumentExport"]
+        end
+    end
+
+    subgraph Services["🔧 服务层"]
+        subgraph AILayer["🤖 AI 服务"]
+            AIService["AIService.js"]
+            EmbeddingModel["embeddingModel.ts<br/>本地向量化"]
+            SemanticCache["semanticCache.ts"]
+            KnowledgeGraph["knowledgeGraph.ts"]
+        end
+
+        subgraph DataServices["💾 数据服务"]
+            TeamService["teamService.ts<br/>团队管理"]
+            KBService["kbService.ts<br/>知识库管理"]
+            SpreadsheetService["spreadsheetService.ts<br/>表格管理"]
+            CommentService["commentService.ts<br/>评论管理"]
+            VersionService["versionService.ts<br/>版本历史"]
+        end
+
+        subgraph Storage["📦 存储抽象"]
+            StorageContext["StorageContext<br/>统一存储上下文"]
+            MockStorage["mockStorage.js<br/>开发模式"]
+        end
+    end
+
+    subgraph API["🔌 API 路由"]
+        ChatAPI["/api/chat<br/>AI对话"]
+        CompletionAPI["/api/completion<br/>自动补全"]
+        EmbeddingsAPI["/api/embeddings<br/>向量化"]
+        SearchAPI["/api/search<br/>语义搜索"]
+        ModelsAPI["/api/models<br/>模型列表"]
+    end
+
+    subgraph Backend["☁️ Supabase 后端"]
+        SupaAuth["Auth<br/>用户认证"]
+        SupaDB["PostgreSQL<br/>关系数据库"]
+        SupaRLS["RLS<br/>行级安全"]
+        SupaVector["pgvector<br/>向量搜索"]
+    end
+
+    subgraph WSServer["🔄 协作服务器"]
+        WebSocket["ws-server.js<br/>WebSocket服务"]
+        Yjs["Yjs<br/>CRDT同步"]
+    end
+
+    subgraph External["🌐 外部服务"]
+        DeepSeek["DeepSeek API"]
+        Google["Google Gemini API"]
+    end
+
+    Browser --> Frontend
+    Frontend --> API
+    Frontend --> Backend
+    Frontend --> WSServer
+    API --> External
+    Services --> Backend
+    WSServer --> Yjs
+
+
+# ========================================
+# 2. 数据库 ER 图
+# ========================================
+
+erDiagram
+    profiles ||--o{ documents : "owns"
+    profiles ||--o{ folders : "owns"
+    profiles ||--o{ spreadsheets : "owns"
+    profiles ||--o{ teams : "creates"
+    
+    teams ||--o{ team_members : "has"
+    teams ||--o{ knowledge_bases : "contains"
+    
+    knowledge_bases ||--o{ kb_folders : "organizes"
+    knowledge_bases ||--o{ documents : "stores"
+    knowledge_bases ||--o{ spreadsheets : "stores"
+    
+    folders ||--o{ documents : "contains"
+    folders ||--o{ spreadsheets : "contains"
+    folders ||--o{ folders : "nests"
+    
+    documents ||--o{ versions : "has"
+    documents ||--o{ comments : "has"
+    documents ||--o{ document_embeddings : "vectors"
+    
+    spreadsheets ||--o{ spreadsheet_embeddings : "vectors"
+    
+    comments ||--o{ comments : "replies"
+
+    profiles {
+        uuid id PK
+        text display_name
+        text avatar_url
+        timestamp created_at
+    }
+
+    teams {
+        uuid id PK
+        text name
+        text description
+        text visibility
+        uuid created_by FK
+    }
+
+    team_members {
+        uuid team_id PK_FK
+        uuid user_id PK_FK
+        text role
+    }
+
+    knowledge_bases {
+        uuid id PK
+        text name
+        text description
+        uuid team_id FK
+        uuid created_by FK
+    }
+
+    kb_folders {
+        uuid id PK
+        text name
+        uuid knowledge_base_id FK
+        uuid parent_id FK
+    }
+
+    folders {
+        uuid id PK
+        text name
+        uuid parent_id FK
+        uuid user_id FK
+    }
+
+    documents {
+        uuid id PK
+        text title
+        text content
+        text status
+        uuid folder_id FK
+        uuid user_id FK
+        uuid knowledge_base_id FK
+    }
+
+    spreadsheets {
+        uuid id PK
+        text title
+        jsonb data
+        uuid folder_id FK
+        uuid user_id FK
+        uuid knowledge_base_id FK
+    }
+
+    versions {
+        uuid id PK
+        uuid document_id FK
+        text title
+        text content
+        text name
+    }
+
+    comments {
+        uuid id PK
+        uuid document_id FK
+        uuid parent_id FK
+        text content
+        text status
+    }
+
+    document_embeddings {
+        uuid id PK
+        uuid document_id FK
+        vector embedding
+        text chunk_text
+    }
+
+    spreadsheet_embeddings {
+        uuid id PK
+        uuid spreadsheet_id FK
+        vector embedding
+        text chunk_text
+    }
+
+
+# ========================================
+# 3. 前端组件架构图
+# ========================================
+
+graph TD
+    subgraph Layout["布局层"]
+        RootLayout["RootLayout<br/>根布局"]
+        AppSidebar["AppSidebar<br/>全局侧边栏"]
+        EditorShell["EditorShell<br/>编辑器外壳"]
+    end
+
+    subgraph PageComponents["页面组件"]
+        DashboardPage["Dashboard<br/>首页/问AI"]
+        EditorPage["EditorPage<br/>文档编辑"]
+        SpreadsheetPage["SpreadsheetPage<br/>表格编辑"]
+        TeamsPage["TeamsPage<br/>团队列表"]
+        KBPage["KBPage<br/>知识库详情"]
+    end
+
+    subgraph EditorComponents["编辑器组件群"]
+        DocumentEditorModule["DocumentEditorModule<br/>文档编辑模块"]
+        SpreadsheetEditorModule["SpreadsheetEditorModule<br/>表格编辑模块"]
+
+        subgraph DocHeaderGroup["文档头部"]
+            DocHeader["DocHeader"]
+            DocToolbar["DocToolbar"]
+            MenuBar["MenuBar"]
+        end
+
+        subgraph EditorCore["编辑器核心"]
+            RichTextEditor["RichTextEditor<br/>(TipTap)"]
+            SpreadsheetEditor["SpreadsheetEditor<br/>(FortuneSheet)"]
+        end
+
+        subgraph EditorPanels["编辑器面板"]
+            DocOutline["DocOutline<br/>文档大纲"]
+            VersionHistorySidebar["VersionHistorySidebar<br/>版本历史"]
+            CommentsSidebar["Comments<br/>评论面板"]
+            AISidebar["AISidebar<br/>AI助手"]
+        end
+    end
+
+    subgraph AIComponents["AI 组件"]
+        AIQueryPanel["AIQueryPanel<br/>问答面板"]
+        ReferencePanel["ReferencePanel<br/>引用面板"]
+        ConversationTabs["ConversationTabs<br/>对话标签"]
+        KnowledgeBaseSelector["KnowledgeBaseSelector<br/>知识库选择器"]
+        MagicCommand["MagicCommand<br/>魔法命令"]
+    end
+
+    subgraph SharedComponents["共享组件"]
+        FolderTree["FolderTree<br/>目录树"]
+        SearchModal["SearchModal<br/>搜索弹窗"]
+        SearchFilterPanel["SearchFilterPanel<br/>高级筛选"]
+        SettingsModal["SettingsModal<br/>设置弹窗"]
+        CreateItemModal["CreateItemModal<br/>新建弹窗"]
+    end
+
+    RootLayout --> AppSidebar
+    RootLayout --> PageComponents
+
+    DashboardPage --> AIQueryPanel
+    DashboardPage --> ReferencePanel
+    DashboardPage --> ConversationTabs
+
+    EditorPage --> DocumentEditorModule
+    SpreadsheetPage --> SpreadsheetEditorModule
+
+    DocumentEditorModule --> DocHeaderGroup
+    DocumentEditorModule --> RichTextEditor
+    DocumentEditorModule --> EditorPanels
+
+    SpreadsheetEditorModule --> DocHeader
+    SpreadsheetEditorModule --> SpreadsheetEditor
+
+    AppSidebar --> FolderTree
+    AppSidebar --> SharedComponents
+
+
+# ========================================
+# 4. AI 服务架构图
+# ========================================
+
+flowchart TB
+    subgraph UserInteraction["用户交互"]
+        ChatInput["用户输入"]
+        AutoComplete["自动补全"]
+        MagicCmd["魔法命令"]
+    end
+
+    subgraph FrontendAI["前端 AI 组件"]
+        AIQueryPanel["AIQueryPanel"]
+        AISidebar["AISidebar"]
+        MagicCommand["MagicCommand"]
+        GhostText["GhostTextExtension<br/>幽灵文本"]
+    end
+
+    subgraph AIServiceLayer["AI 服务层"]
+        AIService["AIService.js<br/>统一服务入口"]
+        PromptRegistry["PromptRegistry.js<br/>提示词管理"]
+        StreamHandler["StreamHandler.js<br/>流式处理"]
+    end
+
+    subgraph LocalAI["本地 AI 处理"]
+        EmbeddingModel["embeddingModel.ts<br/>Xenova/all-MiniLM"]
+        EmbeddingPool["embeddingPool.ts<br/>嵌入池"]
+        SemanticCache["semanticCache.ts<br/>语义缓存"]
+        KnowledgeGraph["knowledgeGraph.ts<br/>知识图谱"]
+        Reranker["reranker.ts<br/>重排序"]
+        IntentRouter["intentRouter.ts<br/>意图路由"]
+    end
+
+    subgraph APIRoutes["API 路由"]
+        ChatAPI["/api/chat"]
+        CompletionAPI["/api/completion"]
+        EmbeddingsAPI["/api/embeddings"]
+        SearchAPI["/api/search"]
+    end
+
+    subgraph ExternalLLM["外部 LLM"]
+        DeepSeek["DeepSeek API<br/>(默认)"]
+        Gemini["Google Gemini"]
+    end
+
+    subgraph VectorDB["向量数据库"]
+        PGVector["Supabase pgvector<br/>语义搜索"]
+    end
+
+    ChatInput --> AIQueryPanel
+    AutoComplete --> GhostText
+    MagicCmd --> MagicCommand
+
+    FrontendAI --> AIServiceLayer
+    AIServiceLayer --> APIRoutes
+    APIRoutes --> ExternalLLM
+    
+    FrontendAI --> LocalAI
+    LocalAI --> PGVector
+    SearchAPI --> PGVector
+    EmbeddingsAPI --> EmbeddingModel
+
+
+# ========================================
+# 5. 实时协作时序图
+# ========================================
+
+sequenceDiagram
+    participant U1 as 用户 A
+    participant U2 as 用户 B
+    participant FE1 as 前端 A
+    participant FE2 as 前端 B
+    participant WS as WebSocket Server
+    participant YJS as Yjs CRDT
+    participant DB as Supabase
+
+    U1->>FE1: 编辑文档
+    FE1->>YJS: 本地更新 Y.Doc
+    YJS->>WS: 同步增量数据
+    WS->>YJS: 广播到其他客户端
+    YJS->>FE2: 合并远程更新
+    FE2->>U2: 实时显示变更
+
+    Note over FE1,FE2: 协作光标同步
+    FE1->>WS: awareness.setLocalState
+    WS->>FE2: 广播光标位置
+
+    Note over FE1,DB: 定期持久化
+    FE1->>DB: 自动保存 (5s)
+    DB-->>FE1: 确认保存
+
+
+# ========================================
+# 6. 编辑器扩展思维导图
+# ========================================
+
+mindmap
+  root((RichTextEditor))
+    TipTap StarterKit
+      Paragraph
+      Heading
+      BulletList
+      OrderedList
+      Blockquote
+      CodeBlock
+      HardBreak
+    格式扩展
+      FontFamily
+      FontSize
+      Color
+      Highlight
+      TextAlign
+      TextStyle
+    表格扩展
+      Table
+      TableRow
+      TableCell
+      TableHeader
+      TableContextMenu
+    协作扩展
+      Collaboration
+      CollaborationCursor
+      CommentMark
+    媒体扩展
+      ResizableImage
+      Link
+      MermaidExtension
+      FlowchartExtension
+    AI扩展
+      GhostTextExtension
+      SuggestionMark
+      MagicCommand
+    高级扩展
+      Indent
+      TaskList
+      TaskItem
+      SearchReplaceExtension
+      ModuleExtensions
+
+
+# ========================================
+# 7. 安全架构图
+# ========================================
+
+flowchart LR
+    subgraph Client["客户端请求"]
+        User["用户"]
+    end
+
+    subgraph Auth["认证层"]
+        JWT["JWT Token"]
+        SupaAuth["Supabase Auth"]
+    end
+
+    subgraph RLS["行级安全策略"]
+        PolicyDocs["documents:<br/>auth.uid() = user_id"]
+        PolicyFolders["folders:<br/>auth.uid() = user_id"]
+        PolicyTeams["teams:<br/>visibility = public<br/>OR membership"]
+        PolicyKB["knowledge_bases:<br/>team membership"]
+    end
+
+    subgraph Data["数据层"]
+        DB[(PostgreSQL)]
+    end
+
+    User --> JWT
+    JWT --> SupaAuth
+    SupaAuth --> RLS
+    RLS --> DB
+
+
+# ========================================
+# 8. 技术栈饼图
+# ========================================
+
+pie title 技术栈构成
+    "Next.js 16 (React 19)" : 35
+    "TipTap Editor" : 20
+    "Supabase (Auth + DB)" : 25
+    "AI 服务 (DeepSeek/Gemini)" : 15
+    "Yjs 协作" : 5

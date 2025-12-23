@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { DiagramProvider } from "@/contexts/diagram-context";
 import { StorageProvider } from "@/contexts/StorageContext";
+import SWRProvider from "@/components/providers/SWRProvider";
+import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
+import { PageErrorBoundary } from "@/components/providers/ErrorBoundary";
 
 import "./globals.css";
 
@@ -31,10 +34,17 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <StorageProvider>
-          <DiagramProvider>{children}</DiagramProvider>
-        </StorageProvider>
+        <PageErrorBoundary>
+          <ReactQueryProvider>
+            <SWRProvider>
+              <StorageProvider>
+                <DiagramProvider>{children}</DiagramProvider>
+              </StorageProvider>
+            </SWRProvider>
+          </ReactQueryProvider>
+        </PageErrorBoundary>
       </body>
     </html>
   );
 }
+

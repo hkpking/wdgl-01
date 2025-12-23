@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Sparkles, X, Send, Paperclip, FileText, Shield, Bot, User, Search, Zap } from 'lucide-react';
 import SourceSelector from './SourceSelector';
 import { aiService } from '@/lib/ai/AIService';
-import * as mockStorage from '@/lib/storage';
+import * as mockStorage from '@/lib/services/mockStorage';
 
 // 意图识别（客户端版本）
 const INTENT_PATTERNS = [
@@ -31,6 +31,7 @@ export default function AISidebar({ currentUser, currentDoc, onClose, embedded =
     const [isSearching, setIsSearching] = useState(false);
     const [searchStatus, setSearchStatus] = useState(''); // 搜索状态文本
     const [sources, setSources] = useState([]);
+    const [searchResults, setSearchResults] = useState([]); // 存储搜索结果用于渲染链接
     const [isSourceSelectorOpen, setIsSourceSelectorOpen] = useState(false);
     const messagesEndRef = useRef(null);
     const textareaRef = useRef(null);
@@ -135,10 +136,14 @@ export default function AISidebar({ currentUser, currentDoc, onClose, embedded =
 
             // 步骤2: 构建语义搜索上下文
             const semanticContext = semanticResults.length > 0
-                ? semanticResults.map(r =>
-                    `📄 来源: ${r.metadata?.title || '未知文档'} (相似度: ${(r.similarity * 100).toFixed(0)}%)\n${r.chunk_text}`
-                ).join('\n\n---\n\n')
+                ? semanticResults.map(r => {
+                    const typeIcon = r.type === 'spreadsheet' ? '📊' : '📄';
+                    return `${typeIcon} 来源: ${r.metadata?.title || '未知'} (相似度: ${(r.similarity * 100).toFixed(0)}%)\n${r.chunk_text}`;
+                }).join('\n\n---\n\n')
                 : '';
+
+            // 存储搜索结果用于渲染可点击链接
+            setSearchResults(semanticResults);
 
             // 步骤3: 构建手动来源上下文
             const MAX_DOC_CHARS = 8000;
@@ -221,10 +226,30 @@ Instructions:
 
             // 添加来源引用（如果有语义搜索结果）
             if (semanticResults.length > 0) {
+                // 构建带类型图标的来源列表
+                const uniqueSources = [];
+                const seenIds = new Set();
+                for (const r of semanticResults) {
+                    if (!seenIds.has(r.document_id)) {
+                        seenIds.add(r.document_id);
+                        uniqueSources.push({
+                            id: r.document_id,
+                            title: r.metadata?.title || '未知',
+                            type: r.type || 'document',
+                            teamId: r.metadata?.team_id,
+                            kbId: r.metadata?.knowledge_base_id
+                        });
+                    }
+                }
+
                 const sourcesRef = '\n\n---\n📚 **引用来源**: ' +
-                    [...new Set(semanticResults.map(r => r.metadata?.title || '未知'))].join('、');
+                    uniqueSources.map(s => {
+                        const icon = s.type === 'spreadsheet' ? '📊' : '📄';
+                        return `${icon}${s.title}`;
+                    }).join('、');
+
                 setMessages(prev => prev.map(msg =>
-                    msg.id === aiMsgId ? { ...msg, content: msg.content + sourcesRef } : msg
+                    msg.id === aiMsgId ? { ...msg, content: msg.content + sourcesRef, sources: uniqueSources } : msg
                 ));
             }
 
@@ -306,7 +331,47 @@ Instructions:
                             {msg.role === 'ai' ? <Bot size={16} /> : <User size={16} />}
                         </div>
                         <div className={`max-w-[80%] p-3 rounded-lg text-sm whitespace-pre-wrap ${msg.role === 'ai' ? 'bg-white border border-gray-200 shadow-sm text-gray-800' : 'bg-blue-600 text-white'}`}>
-                            {msg.content ? msg.content : (
+                            {msg.content ? (
+                                <>
+                                    {/* 消息内容（去掉引用来源部分，单独渲染） */}
+                                    {msg.content.split('---\n📚 **引用来源**')[0]}
+
+                                    {/* 可点击的来源标签 */}
+                                    {msg.sources && msg.sources.length > 0 && (
+                                        <div className="mt-3 pt-3 border-t border-gray-200">
+                                            <div className="text-xs text-gray-500 mb-2">📚 引用来源：</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {msg.sources.map((source, idx) => {
+                                                    // 构建跳转 URL
+                                                    let href = '';
+                                                    if (source.type === 'spreadsheet') {
+                                                        href = `/spreadsheet/${source.id}`;
+                                                    } else if (source.teamId && source.kbId) {
+                                                        href = `/teams/${source.teamId}/kb/${source.kbId}?doc=${source.id}`;
+                                                    } else {
+                                                        href = `/editor/${source.id}`;
+                                                    }
+                                                    const icon = source.type === 'spreadsheet' ? '📊' : '📄';
+
+                                                    return (
+                                                        <a
+                                                            key={`${source.id}-${idx}`}
+                                                            href={href}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-md text-xs hover:bg-blue-100 transition-colors"
+                                                            title={`打开 ${source.type === 'spreadsheet' ? '表格' : '文档'}: ${source.title}`}
+                                                        >
+                                                            <span>{icon}</span>
+                                                            <span className="max-w-[120px] truncate">{source.title}</span>
+                                                        </a>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
                                 <div className="flex gap-1 py-1">
                                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />

@@ -65,26 +65,44 @@ function ReferenceList({ references, isExpanded, onToggle }: {
 
             {isExpanded && (
                 <div className="mt-2 space-y-2">
-                    {references.map((ref, idx) => (
-                        <a
-                            key={ref.id || idx}
-                            href={`/editor/${ref.document_id || ref.metadata?.docId || ref.id}`}
-                            className="flex items-start gap-2 p-2 bg-blue-50 hover:bg-blue-100 rounded-lg text-sm transition"
-                        >
-                            <FileText size={14} className="text-blue-500 flex-shrink-0 mt-0.5" />
-                            <div className="flex-1 min-w-0">
-                                <div className="font-medium text-blue-800 truncate">
-                                    {ref.metadata?.title || ref.title || '未知文档'}
-                                </div>
-                                {ref.chunk_text && (
-                                    <div className="text-xs text-gray-500 line-clamp-1 mt-0.5">
-                                        {ref.chunk_text.substring(0, 80)}...
+                    {references.map((ref, idx) => {
+                        const docId = ref.document_id || ref.metadata?.docId || ref.id;
+                        const isSpreadsheet = ref.type === 'spreadsheet' || ref.metadata?.type === 'spreadsheet';
+                        const teamId = ref.metadata?.team_id;
+                        const kbId = ref.metadata?.knowledge_base_id;
+
+                        // 构建跳转链接：优先跳转到知识库页面
+                        let href: string;
+                        if (teamId && kbId) {
+                            const queryParam = isSpreadsheet ? 'sheet' : 'doc';
+                            href = `/teams/${teamId}/kb/${kbId}?${queryParam}=${docId}`;
+                        } else {
+                            const basePath = isSpreadsheet ? '/spreadsheet' : '/editor';
+                            href = `${basePath}/${docId}`;
+                        }
+
+                        return (
+                            <a
+                                key={ref.id || idx}
+                                href={href}
+                                className="flex items-start gap-2 p-2 bg-blue-50 hover:bg-blue-100 rounded-lg text-sm transition"
+                            >
+                                <FileText size={14} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-blue-800 truncate">
+                                        {ref.metadata?.title || ref.title || '未知文档'}
+                                        {isSpreadsheet && <span className="ml-1 text-xs text-gray-500">[表格]</span>}
                                     </div>
-                                )}
-                            </div>
-                            <ExternalLink size={12} className="text-blue-400 flex-shrink-0" />
-                        </a>
-                    ))}
+                                    {ref.chunk_text && (
+                                        <div className="text-xs text-gray-500 line-clamp-1 mt-0.5">
+                                            {ref.chunk_text.substring(0, 80)}...
+                                        </div>
+                                    )}
+                                </div>
+                                <ExternalLink size={12} className="text-blue-400 flex-shrink-0" />
+                            </a>
+                        );
+                    })}
                 </div>
             )}
         </div>

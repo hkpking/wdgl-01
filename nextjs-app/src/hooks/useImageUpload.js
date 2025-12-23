@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { uploadImage } from '@/lib/editor-utils';
-import * as mockStorage from '@/lib/storage';
+import * as mockStorage from '@/lib/services/mockStorage';
 
 /**
  * 图片上传 Hook
