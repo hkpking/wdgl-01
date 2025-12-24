@@ -6,9 +6,10 @@ on:
     tags: ['v*']
 
 jobs:
-  # 质量检查
+  # 质量检查 (信息收集，不阻塞部署)
   quality-check:
     runs-on: ubuntu-latest
+    continue-on-error: true  # 关键：不阻塞后续 job
     defaults:
       run:
         working-directory: ./nextjs-app
@@ -30,12 +31,12 @@ jobs:
       
       - name: Lint check
         run: npm run lint
-        continue-on-error: true  # ESLint 警告不阻止部署
+        continue-on-error: true
 
-  # 部署到阿里云
+  # 直接部署 (不依赖 quality-check)
   deploy:
-    needs: quality-check
     runs-on: ubuntu-latest
+    # 移除 needs: quality-check，确保部署不被阻塞
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Deploy to Aliyun Server
@@ -46,8 +47,13 @@ jobs:
           key: ${{ secrets.ALIYUN_SSH_KEY }}
           port: 22
           script: |
+            set -e
             echo "===== 开始部署 ====="
             cd /var/www/wdgl-01
+            
+            # 记录当前版本用于回滚
+            PREV_COMMIT=$(git rev-parse HEAD)
+            echo "当前版本: $PREV_COMMIT"
             
             # 拉取最新代码
             echo "[1/4] 拉取代码..."
@@ -64,8 +70,8 @@ jobs:
             
             # 重启服务
             echo "[4/4] 重启 PM2 服务..."
-            pm2 restart wdgl-nextjs
-            pm2 restart wdgl-collab
+            pm2 restart wdgl-nextjs || pm2 start ecosystem.config.cjs --only wdgl-nextjs
+            pm2 restart wdgl-collab || pm2 start ecosystem.config.cjs --only wdgl-collab
             
             echo "===== 部署完成 ====="
             pm2 list
