@@ -60,7 +60,8 @@ export default function Dashboard() {
         if (currentUser?.uid) {
             loadFolders();
         }
-    }, [currentUser?.uid, loadFolders]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser?.uid]);
 
     // 处理引用更新
     const handleReferencesUpdate = (refs: SearchReference[]) => {

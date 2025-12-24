@@ -36,11 +36,9 @@ const SpreadsheetEditor = forwardRef<SpreadsheetEditorHandle, SpreadsheetEditorP
     // 确保初始数据格式正确 - 使用 useMemo 避免每次渲染都创建新对象
     const sheets = useMemo(() => {
         if (Array.isArray(initialData) && initialData.length > 0) {
-            console.log('[SpreadsheetEditor] 使用传入数据:', initialData.length, '个 sheet');
             return initialData;
         }
         // 默认空表格
-        console.log('[SpreadsheetEditor] 使用默认空表格');
         return [{
             name: 'Sheet1',
             celldata: [],
@@ -57,39 +55,6 @@ const SpreadsheetEditor = forwardRef<SpreadsheetEditorHandle, SpreadsheetEditorP
             if (workbookRef.current) {
                 try {
                     const sheets = workbookRef.current.getAllSheets?.();
-                    console.log('[SpreadsheetEditor] getAllSheets 返回:', sheets?.length, '个 sheet');
-
-                    // 详细的数据结构诊断
-                    if (sheets?.length > 0) {
-                        const firstSheet = sheets[0];
-                        console.log('[SpreadsheetEditor] 第一个 sheet 的 keys:', Object.keys(firstSheet || {}));
-                        console.log('[SpreadsheetEditor] celldata 长度:', firstSheet?.celldata?.length || 0);
-                        console.log('[SpreadsheetEditor] data 行数:', firstSheet?.data?.length || 0);
-
-                        // 检查 data 数组中的实际非空数据
-                        if (firstSheet?.data) {
-                            let nonNullCount = 0;
-                            for (const row of firstSheet.data) {
-                                if (row) {
-                                    for (const cell of row) {
-                                        if (cell !== null && cell !== undefined) {
-                                            nonNullCount++;
-                                            if (nonNullCount <= 3) {
-                                                console.log('[SpreadsheetEditor] 发现非空单元格:', JSON.stringify(cell).slice(0, 100));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            console.log('[SpreadsheetEditor] data 中非空单元格总数:', nonNullCount);
-                        }
-
-                        // 检查 celldata 中的数据
-                        if (firstSheet?.celldata?.length > 0) {
-                            console.log('[SpreadsheetEditor] celldata 前3项:', firstSheet.celldata.slice(0, 3));
-                        }
-                    }
-
                     return sheets || null;
                 } catch (error) {
                     console.error('[SpreadsheetEditor] getAllSheets 失败:', error);
@@ -103,7 +68,6 @@ const SpreadsheetEditor = forwardRef<SpreadsheetEditorHandle, SpreadsheetEditorP
 
     // 处理数据变化 - 仅通知父组件有变化
     const handleChange = useCallback((data: any[]) => {
-        console.log('[SpreadsheetEditor] onChange 触发');
         if (onChange) {
             onChange(data);
         }
@@ -111,7 +75,6 @@ const SpreadsheetEditor = forwardRef<SpreadsheetEditorHandle, SpreadsheetEditorP
 
     // 使用 sheetId 作为 key，当 sheetId 变化时强制重新创建 Workbook 组件
     const workbookKey = sheetId || 'default';
-    console.log('[SpreadsheetEditor] 渲染, key:', workbookKey);
 
     return (
         <div ref={containerRef} className="w-full h-full">

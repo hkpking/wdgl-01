@@ -265,7 +265,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 4. 混合排序：向量相似度 + 关键词匹配
-        let results = allResults.map((r: any) => {
+        const results = allResults.map((r: any) => {
             const keywordBoost = calculateKeywordBoost(query, r.chunk_text);
             const hybridScore = r.similarity + keywordBoost;
             return { ...r, keywordBoost, hybridScore };

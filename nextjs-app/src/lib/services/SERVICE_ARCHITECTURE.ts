@@ -73,6 +73,24 @@
  */
 
 /**
+ * versionService.ts
+ * 职责：版本历史管理 (Polyglot)
+ * 数据表：versions
+ * 
+ * 统一管理所有内容类型（Document, Spreadsheet）的版本控制。
+ * 支持：saveVersion / getVersions / updateVersionLabel
+ */
+
+/**
+ * commentService.ts
+ * 职责：评论系统 (Polyglot)
+ * 数据表：comments
+ * 
+ * 统一管理所有内容类型的评论。
+ * 支持：addComment / getComments / resolveComment / replyComment
+ */
+
+/**
  * departmentService.ts
  * 职责：部门管理
  * 数据表：departments, department_members
@@ -108,10 +126,11 @@
  * - 状态同步：通过回调函数（onSaveSuccess, onDirtyChange）
  * 
  * 组件职责：
- * - Page：URL 路由 + 布局组合（< 200 行）
- * - Container：状态管理 + 数据获取（< 300 行）
- * - Module：自治功能单元（< 500 行）
- * - Component：纯 UI 展示（< 100 行）
+ * - Page (View)：纯布局和组件组合，无业务逻辑（< 200 行）
+ * - Hook (Model)：集中管理状态、数据获取和副作用（useKBPageState）
+ * - Handler (Controller)：纯业务逻辑函数，处理用户交互（kbPageHandlers）
+ * - Module：自治功能单元（如 DocumentEditorModule）
+ * - Component：纯 UI 展示
  */
 
 export { };

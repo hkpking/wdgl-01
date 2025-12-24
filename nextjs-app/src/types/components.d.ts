@@ -35,6 +35,11 @@ declare module '@/components/DocHeader' {
         content?: string;
         editor?: any;
         children?: ReactNode;
+        currentUser?: {
+            uid: string;
+            displayName?: string;
+            email?: string;
+        };
     }
     const DocHeader: FC<DocHeaderProps>;
     export default DocHeader;
@@ -46,15 +51,37 @@ declare module '@/components/DocToolbar' {
     export default DocToolbar;
 }
 
-declare module '@/components/VersionHistorySidebar' {
+declare module '@/components/shared/VersionHistorySidebar' {
     import { FC } from 'react';
-    const VersionHistorySidebar: FC<any>;
+    interface VersionHistorySidebarProps {
+        docId: string;
+        currentUser: any;
+        onSelectVersion: (version: any) => void;
+        currentVersionId: string | null;
+        onClose: () => void;
+    }
+    const VersionHistorySidebar: FC<VersionHistorySidebarProps>;
     export default VersionHistorySidebar;
 }
 
-declare module '@/components/Comments/CommentSidebar' {
+declare module '@/components/shared/Comments/CommentSidebar' {
     import { FC } from 'react';
-    const CommentSidebar: FC<any>;
+    interface CommentSidebarProps {
+        comments: any[];
+        currentUser: any;
+        activeCommentId?: string | null;
+        onAddComment?: () => void;
+        onReply?: (commentId: string, content: string) => void;
+        onResolve?: (commentId: string) => void;
+        onDelete?: (commentId: string) => void;
+        onClose: () => void;
+        newCommentDraft?: any;
+        onCancelDraft?: () => void;
+        onSubmitDraft?: (content: string, mentions?: any[]) => void;
+        onSelectComment?: (commentId: string) => void;
+        users?: any[];
+    }
+    const CommentSidebar: FC<CommentSidebarProps>;
     export default CommentSidebar;
 }
 

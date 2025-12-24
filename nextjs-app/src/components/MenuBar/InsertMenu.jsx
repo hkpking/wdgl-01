@@ -9,7 +9,7 @@ import {
 import { ToolbarButton as Button } from '../shared';
 import { useImageUpload } from '../../hooks/useImageUpload';
 
-export function InsertMenu({ editor }) {
+export function InsertMenu({ editor, currentUser }) {
     const [showMenu, setShowMenu] = useState(false);
     const [showTablePicker, setShowTablePicker] = useState(false);
     const [showLinkInput, setShowLinkInput] = useState(false);
@@ -17,7 +17,7 @@ export function InsertMenu({ editor }) {
     const [tableSize, setTableSize] = useState({ rows: 0, cols: 0 });
 
     const menuRef = useRef(null);
-    const { fileInputRef, handleImageUpload, triggerUpload, addImageViaUrl } = useImageUpload(editor);
+    const { fileInputRef, handleImageUpload, triggerUpload, addImageViaUrl } = useImageUpload(editor, currentUser);
 
     useEffect(() => {
         const handleClickOutside = (e) => {

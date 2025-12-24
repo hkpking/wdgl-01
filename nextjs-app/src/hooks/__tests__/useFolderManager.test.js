@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useFolderManager } from '../useFolderManager';
 
-// Mock mockStorage
-vi.mock('@/lib/storage', () => ({
-    getFolders: vi.fn(() => [
+// Mock documentService (新的 Supabase 服务)
+vi.mock('@/lib/services/api/documentService', () => ({
+    getFolders: vi.fn(() => Promise.resolve([
         { id: 'folder-1', name: '工作文档', parentId: null },
         { id: 'folder-2', name: '个人笔记', parentId: null },
         { id: 'folder-3', name: '项目A', parentId: 'folder-1' }
-    ]),
-    createFolder: vi.fn(() => ({ id: 'folder-new', name: '新文件夹' })),
-    updateFolder: vi.fn(),
-    deleteFolder: vi.fn()
+    ])),
+    createFolder: vi.fn(() => Promise.resolve({ id: 'folder-new', name: '新文件夹' })),
+    updateFolder: vi.fn(() => Promise.resolve(true)),
+    deleteFolder: vi.fn(() => Promise.resolve(true))
 }));
 
 // Mock window.confirm
@@ -40,28 +40,28 @@ describe('useFolderManager', () => {
     });
 
     it('loadFolders 加载文件夹列表', async () => {
-        const mockStorage = await import('@/lib/storage');
+        const documentService = await import('@/lib/services/api/documentService');
 
         const { result } = renderHook(() =>
             useFolderManager(mockUser, mockOnUpdate)
         );
 
-        act(() => {
-            result.current.loadFolders();
+        await act(async () => {
+            await result.current.loadFolders();
         });
 
-        expect(mockStorage.getFolders).toHaveBeenCalledWith(mockUser.uid);
+        expect(documentService.getFolders).toHaveBeenCalledWith(mockUser.uid);
         expect(result.current.folders).toHaveLength(3);
         expect(mockOnUpdate).toHaveBeenCalled();
     });
 
-    it('没有用户时 loadFolders 不执行', () => {
+    it('没有用户时 loadFolders 不执行', async () => {
         const { result } = renderHook(() =>
             useFolderManager(null, mockOnUpdate)
         );
 
-        act(() => {
-            result.current.loadFolders();
+        await act(async () => {
+            await result.current.loadFolders();
         });
 
         expect(result.current.folders).toEqual([]);
@@ -96,7 +96,7 @@ describe('useFolderManager', () => {
     });
 
     it('handleCreateFolder 创建文件夹', async () => {
-        const mockStorage = await import('@/lib/storage');
+        const documentService = await import('@/lib/services/api/documentService');
 
         const { result } = renderHook(() =>
             useFolderManager(mockUser, mockOnUpdate)
@@ -109,11 +109,11 @@ describe('useFolderManager', () => {
         });
 
         // 创建文件夹
-        act(() => {
-            result.current.handleCreateFolder();
+        await act(async () => {
+            await result.current.handleCreateFolder();
         });
 
-        expect(mockStorage.createFolder).toHaveBeenCalledWith(
+        expect(documentService.createFolder).toHaveBeenCalledWith(
             mockUser.uid,
             '新项目',
             null
@@ -123,7 +123,7 @@ describe('useFolderManager', () => {
     });
 
     it('handleCreateFolder 空名称不创建', async () => {
-        const mockStorage = await import('@/lib/storage');
+        const documentService = await import('@/lib/services/api/documentService');
 
         const { result } = renderHook(() =>
             useFolderManager(mockUser, mockOnUpdate)
@@ -134,15 +134,15 @@ describe('useFolderManager', () => {
             result.current.setFolderNameInput('   '); // 空白
         });
 
-        act(() => {
-            result.current.handleCreateFolder();
+        await act(async () => {
+            await result.current.handleCreateFolder();
         });
 
-        expect(mockStorage.createFolder).not.toHaveBeenCalled();
+        expect(documentService.createFolder).not.toHaveBeenCalled();
     });
 
     it('handleRenameFolder 重命名文件夹', async () => {
-        const mockStorage = await import('@/lib/storage');
+        const documentService = await import('@/lib/services/api/documentService');
 
         const { result } = renderHook(() =>
             useFolderManager(mockUser, mockOnUpdate)
@@ -155,11 +155,11 @@ describe('useFolderManager', () => {
             result.current.setFolderNameInput('已完成项目');
         });
 
-        act(() => {
-            result.current.handleRenameFolder();
+        await act(async () => {
+            await result.current.handleRenameFolder();
         });
 
-        expect(mockStorage.updateFolder).toHaveBeenCalledWith(
+        expect(documentService.updateFolder).toHaveBeenCalledWith(
             mockUser.uid,
             'folder-1',
             { name: '已完成项目' }
@@ -168,7 +168,7 @@ describe('useFolderManager', () => {
     });
 
     it('handleDeleteFolder 删除文件夹需要确认', async () => {
-        const mockStorage = await import('@/lib/storage');
+        const documentService = await import('@/lib/services/api/documentService');
 
         const { result } = renderHook(() =>
             useFolderManager(mockUser, mockOnUpdate)
@@ -180,12 +180,12 @@ describe('useFolderManager', () => {
             result.current.setFolderToDelete(folder);
         });
 
-        act(() => {
-            result.current.handleDeleteFolder();
+        await act(async () => {
+            await result.current.handleDeleteFolder();
         });
 
         expect(window.confirm).toHaveBeenCalled();
-        expect(mockStorage.deleteFolder).toHaveBeenCalledWith(
+        expect(documentService.deleteFolder).toHaveBeenCalledWith(
             mockUser.uid,
             'folder-1'
         );
@@ -194,7 +194,7 @@ describe('useFolderManager', () => {
     it('handleDeleteFolder 取消确认不删除', async () => {
         window.confirm = vi.fn(() => false); // 用户点击取消
 
-        const mockStorage = await import('@/lib/storage');
+        const documentService = await import('@/lib/services/api/documentService');
 
         const { result } = renderHook(() =>
             useFolderManager(mockUser, mockOnUpdate)
@@ -206,12 +206,12 @@ describe('useFolderManager', () => {
             result.current.setFolderToDelete(folder);
         });
 
-        act(() => {
-            result.current.handleDeleteFolder();
+        await act(async () => {
+            await result.current.handleDeleteFolder();
         });
 
         expect(window.confirm).toHaveBeenCalled();
-        expect(mockStorage.deleteFolder).not.toHaveBeenCalled();
+        expect(documentService.deleteFolder).not.toHaveBeenCalled();
     });
 
     it('setSelectedFolderId 更新选中的文件夹', () => {

@@ -31,7 +31,7 @@ export function ChatMessageDisplay({
     setInput,
     setFiles,
 }: ChatMessageDisplayProps) {
-    const { chartXML, loadDiagram: onDisplayChart } = useDiagram();
+    const { chartXML, loadDiagram: onDisplayChart, activePageId } = useDiagram();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const previousXML = useRef<string>("");
     const processedToolCalls = useRef<Set<string>>(new Set());
@@ -59,11 +59,12 @@ export function ChatMessageDisplay({
             const convertedXml = convertToLegalXml(currentXml);
             if (convertedXml !== previousXML.current) {
                 previousXML.current = convertedXml;
-                const replacedXML = replaceNodes(chartXML, convertedXml);
+                // Pass activePageId to replaceNodes to target the current page
+                const replacedXML = replaceNodes(chartXML, convertedXml, activePageId);
                 onDisplayChart(replacedXML);
             }
         },
-        [chartXML, onDisplayChart]
+        [chartXML, onDisplayChart, activePageId]
     );
 
     useEffect(() => {
@@ -207,8 +208,8 @@ export function ChatMessageDisplay({
                             )}
                             <div
                                 className={`px-4 py-2 whitespace-pre-wrap text-sm rounded-lg max-w-[85%] break-words ${message.role === "user"
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-muted text-muted-foreground"
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted text-muted-foreground"
                                     }`}
                             >
                                 {message.parts?.map((part: any, index: number) => {

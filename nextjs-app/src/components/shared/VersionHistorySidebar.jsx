@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MoreVertical, ChevronRight, ChevronDown, Check, X, GitCompare } from 'lucide-react';
-import * as mockStorage from '@/lib/services/mockStorage';
+import * as versionService from '@/lib/services/versionService';
 import VersionDiff from '@/components/VersionDiff';
 
 export default function VersionHistorySidebar({ docId, currentUser, onSelectVersion, currentVersionId, onClose }) {
@@ -41,12 +41,23 @@ export default function VersionHistorySidebar({ docId, currentUser, onSelectVers
         }
     }, [editingVersionId]);
 
-    const loadVersions = () => {
+    const loadVersions = async () => {
         if (docId && currentUser) {
-            const history = mockStorage.getVersions(currentUser.uid, docId);
-            // Sort by date desc
-            const sorted = history.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
-            setVersions(sorted);
+            try {
+                const history = await versionService.getVersions({ type: 'document', id: docId });
+                // versionService 返回的字段是 createdAt，转换为兼容的 savedAt 格式
+                const formatted = history.map(v => ({
+                    ...v,
+                    savedAt: v.createdAt, // 兼容旧代码使用的 savedAt
+                    name: v.label, // versionService 使用 label，转换为 name
+                }));
+                // Sort by date desc
+                const sorted = formatted.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+                setVersions(sorted);
+            } catch (error) {
+                console.error('加载版本历史失败:', error);
+                setVersions([]);
+            }
         }
     };
 
@@ -88,10 +99,14 @@ export default function VersionHistorySidebar({ docId, currentUser, onSelectVers
         setActiveMenuVersionId(null);
     };
 
-    const handleSaveRename = (versionId) => {
+    const handleSaveRename = async (versionId) => {
         if (editName.trim()) {
-            mockStorage.updateVersion(currentUser.uid, docId, versionId, { name: editName.trim() });
-            loadVersions(); // Reload to show new name
+            try {
+                await versionService.updateVersionLabel(versionId, editName.trim());
+                loadVersions(); // Reload to show new name
+            } catch (error) {
+                console.error('重命名版本失败:', error);
+            }
         }
         setEditingVersionId(null);
     };

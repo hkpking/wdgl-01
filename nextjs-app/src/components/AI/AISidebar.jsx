@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Sparkles, X, Send, Paperclip, FileText, Shield, Bot, User, Search, Zap } from 'lucide-react';
 import SourceSelector from './SourceSelector';
 import { aiService } from '@/lib/ai/AIService';
-import * as mockStorage from '@/lib/services/mockStorage';
 
 // 意图识别（客户端版本）
 const INTENT_PATTERNS = [

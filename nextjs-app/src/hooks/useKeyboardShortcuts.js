@@ -18,7 +18,6 @@ export function useKeyboardShortcuts(handlers) {
             if (isMod && e.key === 's') {
                 e.preventDefault();
                 if (onSave) {
-                    console.log('[Shortcut] Save triggered');
                     onSave();
                 }
             }
@@ -27,7 +26,6 @@ export function useKeyboardShortcuts(handlers) {
             if (isMod && e.key === 'p') {
                 e.preventDefault();
                 if (onPrint) {
-                    console.log('[Shortcut] Print triggered');
                     onPrint();
                 }
             }
@@ -36,7 +34,6 @@ export function useKeyboardShortcuts(handlers) {
             if (isMod && e.altKey && e.shiftKey && e.key.toLowerCase() === 'h') {
                 e.preventDefault();
                 if (onHistory) {
-                    console.log('[Shortcut] Version History triggered');
                     onHistory();
                 }
             }
@@ -48,7 +45,6 @@ export function useKeyboardShortcuts(handlers) {
                 // Google Docs uses this.
                 e.preventDefault();
                 if (onWordCount) {
-                    console.log('[Shortcut] Word Count triggered');
                     onWordCount();
                 }
             }
@@ -57,7 +53,6 @@ export function useKeyboardShortcuts(handlers) {
             if (isMod && e.key === '\\') {
                 e.preventDefault();
                 if (handlers.onClearFormat) {
-                    console.log('[Shortcut] Clear Format triggered');
                     handlers.onClearFormat();
                 }
             }

@@ -8,14 +8,15 @@
  */
 
 import React from 'react';
-import { Star, Share2, Settings, FileText, Trash2 } from 'lucide-react';
+import { Star, Share2, Settings, FileText, Trash2, GitBranch } from 'lucide-react';
 import EmptyState from '@/components/shared/EmptyState';
 import type { KnowledgeBase } from '@/types/team';
 
 interface RecentItem {
     id: string;
     title: string;
-    type: 'document' | 'spreadsheet';
+    type: 'document' | 'spreadsheet' | 'flowchart';
+    contentType?: string; // 'html' | 'flowchart' etc.
     updatedAt: string;
 }
 
@@ -102,6 +103,8 @@ export default function KBHomePanel({
                                             <td className="px-4 py-3 flex items-center gap-2">
                                                 {item.type === 'spreadsheet' ? (
                                                     <span className="text-green-500">📊</span>
+                                                ) : item.contentType === 'flowchart' || item.type === 'flowchart' ? (
+                                                    <GitBranch size={16} className="text-purple-500" />
                                                 ) : (
                                                     <FileText size={16} className="text-gray-400" />
                                                 )}

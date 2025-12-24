@@ -85,7 +85,7 @@ export function convertToLegalXml(xmlString: string): string {
  * @param nodes - The XML string containing new nodes to replace in the diagram
  * @returns The updated XML string with replaced nodes
  */
-export function replaceNodes(currentXML: string, nodes: string): string {
+export function replaceNodes(currentXML: string, nodes: string, pageId?: string): string {
   // Check for valid inputs
   if (!currentXML || !nodes) {
     throw new Error("Both currentXML and nodes must be provided");
@@ -94,7 +94,34 @@ export function replaceNodes(currentXML: string, nodes: string): string {
   try {
     // Parse the XML strings to create DOM objects
     const parser = new DOMParser();
-    const currentDoc = parser.parseFromString(currentXML, "text/xml");
+    let currentDoc = parser.parseFromString(currentXML, "text/xml");
+    let isMxFile = false;
+    let originalMxFileDoc: Document | null = null;
+    let targetDiagramNode: Element | null = null;
+
+    // Check if currentXML is an mxfile
+    if (currentDoc.documentElement.nodeName === "mxfile") {
+      isMxFile = true;
+      originalMxFileDoc = currentDoc;
+
+      // Determine which diagram to modify
+      if (pageId) {
+        targetDiagramNode = currentDoc.querySelector(`diagram[id="${pageId}"]`);
+      }
+
+      // Fallback: use the first diagram if pageId not found or not provided
+      if (!targetDiagramNode) {
+        targetDiagramNode = currentDoc.querySelector("diagram");
+      }
+
+      if (targetDiagramNode) {
+        const diagramContent = targetDiagramNode.textContent || "";
+        // Decode the content
+        const decodedContent = decodeDiagramData(diagramContent);
+        // Parse the decoded content as the currentDoc for manipulation
+        currentDoc = parser.parseFromString(decodedContent, "text/xml");
+      }
+    }
 
     // Handle nodes input - if it doesn't contain <root>, wrap it
     let nodesString = nodes;
@@ -108,11 +135,20 @@ export function replaceNodes(currentXML: string, nodes: string): string {
     let currentRoot = currentDoc.querySelector("mxGraphModel > root");
     if (!currentRoot) {
       // If no root element is found, create the proper structure
-      const mxGraphModel = currentDoc.querySelector("mxGraphModel") ||
-        currentDoc.createElement("mxGraphModel");
+      let mxGraphModel = currentDoc.querySelector("mxGraphModel");
 
-      if (!currentDoc.contains(mxGraphModel)) {
-        currentDoc.appendChild(mxGraphModel);
+      if (!mxGraphModel) {
+        mxGraphModel = currentDoc.createElement("mxGraphModel");
+
+        // If we are working with a decoded doc or a raw fragment, append safely
+        if (currentDoc.documentElement && currentDoc.documentElement.nodeName === "mxfile") {
+          // This case shouldn't happen if we parsed decoded content, but safety check
+          // Do nothing or append to diagram? Logic handled above for isMxFile
+        } else if (!currentDoc.documentElement) {
+          currentDoc.appendChild(mxGraphModel);
+        } else {
+          currentDoc.documentElement.appendChild(mxGraphModel);
+        }
       }
 
       currentRoot = currentDoc.createElement("root");
@@ -170,7 +206,17 @@ export function replaceNodes(currentXML: string, nodes: string): string {
 
     // Convert the modified DOM back to a string
     const serializer = new XMLSerializer();
-    return serializer.serializeToString(currentDoc);
+    const modifiedParams = serializer.serializeToString(currentDoc);
+
+    // If it was an mxfile, we need to update the diagram node with encoded data
+    if (isMxFile && originalMxFileDoc && targetDiagramNode) {
+      // Re-encode the modified diagram
+      const encodedData = encodeDiagramData(modifiedParams);
+      targetDiagramNode.textContent = encodedData;
+      return serializer.serializeToString(originalMxFileDoc);
+    }
+
+    return modifiedParams;
   } catch (error) {
     throw new Error(`Error replacing nodes: ${error}`);
   }
@@ -306,6 +352,44 @@ export function replaceXMLParts(
   return result;
 }
 
+// Helper to decode diagram data (Base64 -> Inflate -> URLDecode)
+export function decodeDiagramData(encoded: string): string {
+  try {
+    const binaryString = atob(encoded);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const decompressedData = pako.inflate(bytes, { windowBits: -15 });
+    const decoder = new TextDecoder('utf-8');
+    const decodedString = decoder.decode(decompressedData);
+    return decodeURIComponent(decodedString);
+  } catch (e) {
+    console.warn("Failed to decode diagram data, assuming plain XML or URL encoded:", e);
+    // Try simple URL decode if decompression fails
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return encoded;
+    }
+  }
+}
+
+// Helper to encode diagram data (URLEncode -> Deflate -> Base64)
+export function encodeDiagramData(xml: string): string {
+  try {
+    const encoded = encodeURIComponent(xml);
+    const bytes = new TextEncoder().encode(encoded);
+    const compressed = pako.deflate(bytes, { raw: true }); // raw=true for windowBits -15
+    const binaryString = String.fromCharCode(...compressed);
+    return btoa(binaryString);
+  } catch (e) {
+    console.error("Failed to encode diagram data:", e);
+    return xml; // Fallback
+  }
+}
+
 export function extractDiagramXML(xml_svg_string: string): string {
   try {
     // 1. Parse the SVG string (using built-in DOMParser in a browser-like environment)
@@ -337,6 +421,10 @@ export function extractDiagramXML(xml_svg_string: string): string {
     const diagramElement = xmlDoc.querySelector('diagram');
 
     if (!diagramElement) {
+      // It might be a direct mxGraphModel
+      if (xmlDoc.querySelector('mxGraphModel')) {
+        return xmlContent;
+      }
       throw new Error("No diagram element found");
     }
     // 5. Extract base64 encoded data
@@ -346,27 +434,8 @@ export function extractDiagramXML(xml_svg_string: string): string {
       throw new Error("No encoded data found in the diagram element");
     }
 
-    // 6. Decode base64 data
-    const binaryString = atob(base64EncodedData);
-
-    // 7. Convert binary string to Uint8Array
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    // 8. Decompress data using pako (equivalent to zlib.decompress with wbits=-15)
-    const decompressedData = pako.inflate(bytes, { windowBits: -15 });
-
-    // 9. Convert the decompressed data to a string
-    const decoder = new TextDecoder('utf-8');
-    const decodedString = decoder.decode(decompressedData);
-
-    // Decode URL-encoded content (equivalent to Python's urllib.parse.unquote)
-    const urlDecodedString = decodeURIComponent(decodedString);
-
-    return urlDecodedString;
+    // 6. Decode base64 data using helper
+    return decodeDiagramData(base64EncodedData);
 
   } catch (error) {
     console.error("Error extracting diagram XML:", error);

@@ -1,18 +1,17 @@
 import { useState, useRef } from 'react';
 import { uploadImage } from '@/lib/editor-utils';
-import * as mockStorage from '@/lib/services/mockStorage';
 
 /**
  * 图片上传 Hook
  * 统一处理图片上传逻辑（文件上传和URL输入）
  * 
  * @param {Object} editor - Tiptap editor 实例
+ * @param {Object} currentUser - 当前用户对象 { uid: string }
  * @returns {Object} 上传状态和方法
  */
-export function useImageUpload(editor) {
+export function useImageUpload(editor, currentUser) {
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef(null);
-    const currentUser = mockStorage.getCurrentUser();
 
     /**
      * 处理文件上传

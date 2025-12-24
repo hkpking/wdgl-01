@@ -38,6 +38,16 @@ export function useCollaboration(documentId, user, options = {}) {
     const providerRef = useRef(null);
     // 记录上一次的用户列表，用于检测用户变化
     const prevUsersRef = useRef([]);
+    // 使用 ref 存储 user 和回调，避免作为 useEffect 依赖导致无限循环
+    const userRef = useRef(user);
+    const callbacksRef = useRef({ onUserJoined, onUserLeft });
+
+    // 保持 ref 与最新值同步，但不触发 effect 重跑
+    useEffect(() => {
+        userRef.current = user;
+        callbacksRef.current = { onUserJoined, onUserLeft };
+    });
+
 
     // 创建 Yjs 文档
     const ydoc = useMemo(() => {
@@ -148,12 +158,14 @@ export function useCollaboration(documentId, user, options = {}) {
         provider.on('connection-error', handleConnectionError);
 
         // 设置用户信息 (用于光标显示)
-        if (user && provider.awareness) {
+        // 使用 userRef.current 避免依赖 user 导致循环
+        const currentUser = userRef.current;
+        if (currentUser && provider.awareness) {
             provider.awareness.setLocalStateField('user', {
-                id: user.id || user.uid,
-                name: user.name || user.displayName || user.email || '匿名用户',
+                id: currentUser.id || currentUser.uid,
+                name: currentUser.name || currentUser.displayName || currentUser.email || '匿名用户',
                 // 使用基于用户 ID 的固定颜色，确保同一用户在不同设备/会话中颜色一致
-                color: user.color || collaborationConfig.getColorByUserId(user.id || user.uid)
+                color: currentUser.color || collaborationConfig.getColorByUserId(currentUser.id || currentUser.uid)
             });
 
             // 监听其他用户
@@ -165,7 +177,8 @@ export function useCollaboration(documentId, user, options = {}) {
 
                 // 检测用户变化（排除自己）
                 const prevUsers = prevUsersRef.current;
-                const selfId = user.id || user.uid;
+                const currentUserRef = userRef.current;
+                const selfId = currentUserRef?.id || currentUserRef?.uid;
 
                 // 找出新加入的用户
                 const joinedUsers = users.filter(u =>
@@ -179,7 +192,8 @@ export function useCollaboration(documentId, user, options = {}) {
                     !users.some(u => u.id === prev.id)
                 );
 
-                // 触发回调
+                // 触发回调 (使用 ref 获取最新回调)
+                const { onUserJoined, onUserLeft } = callbacksRef.current;
                 joinedUsers.forEach(u => {
                     if (onUserJoined) onUserJoined(u);
                 });
@@ -208,7 +222,7 @@ export function useCollaboration(documentId, user, options = {}) {
                 clearTimeout(reconnectTimeoutRef.current);
             }
         };
-    }, [provider, user, getReconnectDelay]);
+    }, [provider, getReconnectDelay]);  // 移除 user 依赖
 
     // 清理
     useEffect(() => {

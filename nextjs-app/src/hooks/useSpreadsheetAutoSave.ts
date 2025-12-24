@@ -34,7 +34,6 @@ export const useSpreadsheetAutoSave = (
                 return;
             }
 
-            console.log('[AutoSave] Saving spreadsheet:', id);
             await saveSpreadsheet(currentUser.uid, id, {
                 title,
                 data
@@ -43,7 +42,6 @@ export const useSpreadsheetAutoSave = (
             setLastSaved(new Date());
             setIsDirty(false);
             onSaveStatusChange('saved');
-            console.log('[AutoSave] Save success');
         } catch (error) {
             console.error('[AutoSave] Save failed:', error);
             onSaveStatusChange('error');

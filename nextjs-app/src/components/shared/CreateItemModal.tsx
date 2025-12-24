@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { X, FileText, FileSpreadsheet, ChevronRight, Loader2 } from 'lucide-react';
+import { X, FileText, FileSpreadsheet, ChevronRight, Loader2, GitBranch } from 'lucide-react';
 import * as teamService from '@/lib/services/teamService';
 import * as kbService from '@/lib/services/kbService';
 import type { Team, KnowledgeBase } from '@/types/team';
@@ -15,9 +15,10 @@ interface CreateItemModalProps {
     defaultKbId?: string;
     onCreateDocument: (teamId: string, kbId: string) => void;
     onCreateSpreadsheet: (teamId: string, kbId: string) => void;
+    onCreateFlowchart?: (teamId: string, kbId: string) => void;
 }
 
-type ItemType = 'document' | 'spreadsheet';
+type ItemType = 'document' | 'spreadsheet' | 'flowchart';
 
 export default function CreateItemModal({
     isOpen,
@@ -27,6 +28,7 @@ export default function CreateItemModal({
     defaultKbId,
     onCreateDocument,
     onCreateSpreadsheet,
+    onCreateFlowchart,
 }: CreateItemModalProps) {
     const [step, setStep] = useState<'type' | 'team' | 'kb'>('type');
     const [selectedType, setSelectedType] = useState<ItemType | null>(null);
@@ -118,8 +120,10 @@ export default function CreateItemModal({
     const handleCreate = (type: ItemType, teamId: string, kbId: string) => {
         if (type === 'document') {
             onCreateDocument(teamId, kbId);
-        } else {
+        } else if (type === 'spreadsheet') {
             onCreateSpreadsheet(teamId, kbId);
+        } else if (type === 'flowchart' && onCreateFlowchart) {
+            onCreateFlowchart(teamId, kbId);
         }
         onClose();
     };
@@ -164,20 +168,27 @@ export default function CreateItemModal({
                 {/* Content */}
                 <div className="p-4">
                     {step === 'type' && (
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-3 gap-3">
                             <button
                                 onClick={() => handleTypeSelect('document')}
-                                className="flex flex-col items-center gap-3 p-6 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition group"
+                                className="flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition group"
                             >
-                                <FileText size={32} className="text-gray-400 group-hover:text-blue-600" />
-                                <span className="font-medium text-gray-700 group-hover:text-blue-700">文档</span>
+                                <FileText size={28} className="text-gray-400 group-hover:text-blue-600" />
+                                <span className="font-medium text-sm text-gray-700 group-hover:text-blue-700">文档</span>
                             </button>
                             <button
                                 onClick={() => handleTypeSelect('spreadsheet')}
-                                className="flex flex-col items-center gap-3 p-6 border border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition group"
+                                className="flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition group"
                             >
-                                <FileSpreadsheet size={32} className="text-gray-400 group-hover:text-green-600" />
-                                <span className="font-medium text-gray-700 group-hover:text-green-700">表格</span>
+                                <FileSpreadsheet size={28} className="text-gray-400 group-hover:text-green-600" />
+                                <span className="font-medium text-sm text-gray-700 group-hover:text-green-700">表格</span>
+                            </button>
+                            <button
+                                onClick={() => handleTypeSelect('flowchart')}
+                                className="flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition group"
+                            >
+                                <GitBranch size={28} className="text-gray-400 group-hover:text-purple-600" />
+                                <span className="font-medium text-sm text-gray-700 group-hover:text-purple-700">流程图</span>
                             </button>
                         </div>
                     )}

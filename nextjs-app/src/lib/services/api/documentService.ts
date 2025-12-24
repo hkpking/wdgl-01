@@ -208,6 +208,7 @@ export async function getKBDocument(docId: string): Promise<Document | null> {
         content: data.content,
         status: data.status,
         folderId: data.folder_id,
+        metadata: data.metadata,
         knowledgeBaseId: data.knowledge_base_id,
         teamId: data.team_id,
         createdAt: data.created_at,
@@ -231,6 +232,8 @@ export async function saveDocument(userId: string, docId: string | null, docData
     if (docData.folderId !== undefined) payload.folder_id = docData.folderId; // 支持 null (移出文件夹)
     if (docData.knowledgeBaseId !== undefined) payload.knowledge_base_id = docData.knowledgeBaseId;
     if (docData.teamId !== undefined) payload.team_id = docData.teamId;
+    if (docData.contentType !== undefined) payload.content_type = docData.contentType; // 流程图等特殊类型
+    if (docData.metadata !== undefined) payload.metadata = docData.metadata; // 流程图预览图等元数据
 
     // 如果是创建且没有 status，则默认为 draft
     if (!docId && !payload.status) {

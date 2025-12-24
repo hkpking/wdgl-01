@@ -26,8 +26,8 @@ import * as documentService from '@/lib/services/api/documentService';
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false });
 const DocHeader = dynamic(() => import('@/components/DocHeader'), { ssr: false });
 const DocToolbar = dynamic(() => import('@/components/DocToolbar'), { ssr: false });
-const VersionHistorySidebar = dynamic(() => import('@/components/VersionHistorySidebar'), { ssr: false });
-const CommentSidebar = dynamic(() => import('@/components/Comments/CommentSidebar'), { ssr: false });
+const VersionHistorySidebar = dynamic(() => import('@/components/shared/VersionHistorySidebar'), { ssr: false });
+const CommentSidebar = dynamic(() => import('@/components/shared/Comments/CommentSidebar'), { ssr: false });
 const AISidebar = dynamic(() => import('@/components/AI/AISidebar'), { ssr: false });
 const MagicCommand = dynamic(() => import('@/components/AI/MagicCommand'), { ssr: false });
 const DocOutlinePanel = dynamic(() => import('@/components/shared/DocOutlinePanel'), { ssr: false });
@@ -96,12 +96,16 @@ export default function DocumentEditorModule({
 }: DocumentEditorModuleProps) {
     const router = useRouter();
 
+    // 使用 ref 存储回调，避免它们作为依赖导致循环
+    const onSaveSuccessRef = useRef(onSaveSuccess);
+    onSaveSuccessRef.current = onSaveSuccess;
+
     // 默认的 storageApi 实现
     const defaultStorageApi = useMemo(() => ({
         saveDocument: async (userId: string, docId: string, data: any) => {
             const result = await documentService.saveDocument(userId, docId, data);
-            if (result && onSaveSuccess) {
-                onSaveSuccess({
+            if (result && onSaveSuccessRef.current) {
+                onSaveSuccessRef.current({
                     id: docId,
                     title: data.title,
                     updatedAt: new Date().toISOString()
@@ -114,7 +118,7 @@ export default function DocumentEditorModule({
         addReply: async () => null,
         updateCommentStatus: async () => null,
         deleteComment: async () => false,
-    }), [onSaveSuccess]);
+    }), []);  // 移除 onSaveSuccess 依赖
 
     // 使用传入的 storageApi 或默认实现
     const effectiveStorageApi = storageApi ?? defaultStorageApi;
@@ -179,12 +183,19 @@ export default function DocumentEditorModule({
     const { exportAsPDF } = useDocumentExport() as any;
 
     // 协作功能
+    // 使用精确依赖避免 currentUser 对象引用变化导致的无限循环
     const collaborationUser = useMemo(() => ({
         id: currentUser.uid,
         name: currentUser.displayName || currentUser.email || '匿名用户',
-    }), [currentUser]);
+    }), [currentUser.uid, currentUser.displayName, currentUser.email]);
 
     const { toasts, dismissToast, notifyUserJoined, notifyUserLeft } = useCollaborationToast();
+
+    // 稳定协作回调 options，避免每次渲染创建新对象
+    const collaborationOptions = useMemo(() => ({
+        onUserJoined: notifyUserJoined,
+        onUserLeft: notifyUserLeft,
+    }), [notifyUserJoined, notifyUserLeft]);
 
     const {
         ydoc,
@@ -194,10 +205,7 @@ export default function DocumentEditorModule({
         connectionError,
         reconnectAttempts,
         reconnect,
-    } = useCollaboration(documentId, collaborationUser, {
-        onUserJoined: notifyUserJoined,
-        onUserLeft: notifyUserLeft,
-    }) as any;
+    } = useCollaboration(documentId, collaborationUser, collaborationOptions) as any;
 
     const collaboration = useMemo(() => {
         if (!ydoc || !provider || !isConnected) return undefined;
@@ -226,19 +234,31 @@ export default function DocumentEditorModule({
         }
     }, [documentId, currentUser, effectiveStorageApi]);
 
-    // 回调
+    // 回调 ref (避免依赖变化导致无限循环)
+    const onTitleChangeRef = useRef(onTitleChange);
+    const onContentChangeRef = useRef(onContentChange);
+    const onDirtyChangeRef = useRef(onDirtyChange);
+
+    // 保持 ref 与最新值同步
     useEffect(() => {
-        onTitleChange?.(title);
-    }, [title, onTitleChange]);
+        onTitleChangeRef.current = onTitleChange;
+        onContentChangeRef.current = onContentChange;
+        onDirtyChangeRef.current = onDirtyChange;
+    });
+
+    // 回调 - 使用 ref 避免依赖回调函数
+    useEffect(() => {
+        onTitleChangeRef.current?.(title);
+    }, [title]);
 
     useEffect(() => {
-        onContentChange?.(content);
-    }, [content, onContentChange]);
+        onContentChangeRef.current?.(content);
+    }, [content]);
 
     // 同步 dirty 状态到父组件
     useEffect(() => {
-        onDirtyChange?.(isDirty);
-    }, [isDirty, onDirtyChange]);
+        onDirtyChangeRef.current?.(isDirty);
+    }, [isDirty]);
 
     // 快捷键
     useKeyboardShortcuts({
@@ -457,6 +477,7 @@ export default function DocumentEditorModule({
                     onImport={handleImport}
                     content={content}
                     editor={editorInstance}
+                    currentUser={currentUser}
                 >
                     <CollaborationStatus
                         connectedUsers={connectedUsers}
@@ -478,7 +499,7 @@ export default function DocumentEditorModule({
 
             {/* 工具栏 */}
             {!isVersionHistoryOpen && !isFocusModeActive && (
-                <DocToolbar editor={editorInstance} onAddComment={handleAddComment} />
+                <DocToolbar editor={editorInstance} onAddComment={handleAddComment} currentUser={currentUser} />
             )}
 
             {/* 主内容区 */}

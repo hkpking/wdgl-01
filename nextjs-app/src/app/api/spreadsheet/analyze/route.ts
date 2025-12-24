@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
         }).join('\n');
 
         // 构建分析 prompt
-        let systemPrompt = '你是一个专业的数据分析师，精通统计分析和数据可视化。请用中文回答。';
+        const systemPrompt = '你是一个专业的数据分析师，精通统计分析和数据可视化。请用中文回答。';
         let userMessage = '';
 
         if (prompt) {

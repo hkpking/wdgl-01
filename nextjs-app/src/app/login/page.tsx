@@ -20,7 +20,6 @@ export default function LoginPage() {
     // 如果已登录，跳转到 Dashboard
     useEffect(() => {
         if (!loading && currentUser) {
-            console.log('[Login] 检测到已登录用户，跳转到 Dashboard');
             router.replace('/dashboard');
         }
     }, [currentUser, loading, router]);
@@ -36,9 +35,7 @@ export default function LoginPage() {
 
         setSubmitting(true);
         try {
-            console.log('[Login] 开始登录...');
             const user = await signIn(email, password);
-            console.log('[Login] 登录成功:', user?.email);
             // 使用 window.location 强制跳转
             window.location.href = '/dashboard';
         } catch (err: any) {

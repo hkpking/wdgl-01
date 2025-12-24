@@ -62,7 +62,7 @@ export function classifyIntent(query: string): IntentResult {
     const cleanQuery = query.trim().toLowerCase();
 
     // 默认结果
-    let result: IntentResult = {
+    const result: IntentResult = {
         intent: 'document_qa',
         confidence: 0.5,
         entities: {},

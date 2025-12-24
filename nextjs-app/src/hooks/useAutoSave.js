@@ -35,10 +35,8 @@ export const useAutoSave = (id, currentUser, documentState, storageApi, isPaused
                 status: documentState.status,
                 contentType: 'html'
             };
-
             console.log('[SAVE] Saving document:', id);
             await storageApi.saveDocument(currentUser.uid, id, docData);
-
             // Save version history (if available)
             if (storageApi.saveVersion) {
                 await storageApi.saveVersion(currentUser.uid, id, {
@@ -54,8 +52,6 @@ export const useAutoSave = (id, currentUser, documentState, storageApi, isPaused
                 title: documentState.title,
                 content: documentState.content
             });
-
-            console.log('[SAVE] Document saved successfully');
         } catch (error) {
             console.error('[SAVE] Error saving:', error);
             alert(error.message);

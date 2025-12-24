@@ -17,8 +17,8 @@ import { getKBPermissions } from '@/types/team';
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false });
 const DocHeader = dynamic(() => import('@/components/DocHeader'), { ssr: false });
 const DocToolbar = dynamic(() => import('@/components/DocToolbar'), { ssr: false });
-const VersionHistorySidebar = dynamic(() => import('@/components/VersionHistorySidebar'), { ssr: false });
-const CommentSidebar = dynamic(() => import('@/components/Comments/CommentSidebar'), { ssr: false });
+const VersionHistorySidebar = dynamic(() => import('@/components/shared/VersionHistorySidebar'), { ssr: false });
+const CommentSidebar = dynamic(() => import('@/components/shared/Comments/CommentSidebar'), { ssr: false });
 const AISidebar = dynamic(() => import('@/components/AI/AISidebar'), { ssr: false });
 const MagicCommand = dynamic(() => import('@/components/AI/MagicCommand'), { ssr: false });
 
@@ -215,6 +215,7 @@ export default function KBEditorPage() {
                 onImport={async (file: File) => { /* TODO: 导入处理 */ }}
                 onInsertBlock={() => { }}
                 content={content}
+                currentUser={currentUser}
             />
 
             {/* 工具栏 */}
@@ -224,6 +225,7 @@ export default function KBEditorPage() {
                 onAI={() => setIsAISidebarOpen(!isAISidebarOpen)}
                 onComment={() => setIsCommentSidebarOpen(!isCommentSidebarOpen)}
                 onMagicCommand={() => setIsMagicCommandOpen(true)}
+                currentUser={currentUser}
             />
 
             {/* 主内容区 */}
@@ -245,24 +247,23 @@ export default function KBEditorPage() {
                 {/* 版本历史 */}
                 {isVersionHistoryOpen && (
                     <VersionHistorySidebar
-                        documentId={docId}
-                        currentContent={content}
-                        onClose={() => setIsVersionHistoryOpen(false)}
-                        onRestore={(versionContent: string) => {
-                            setContent(versionContent);
+                        docId={docId}
+                        currentUser={currentUser}
+                        currentVersionId={null}
+                        onSelectVersion={(version: any) => {
+                            setContent(version.content);
                             setHasChanges(true);
-                            setIsVersionHistoryOpen(false);
                         }}
+                        onClose={() => setIsVersionHistoryOpen(false)}
                     />
                 )}
 
                 {/* 评论 */}
                 {isCommentSidebarOpen && (
                     <CommentSidebar
-                        isOpen={isCommentSidebarOpen}
-                        onClose={() => setIsCommentSidebarOpen(false)}
                         comments={[]}
                         currentUser={currentUser}
+                        onClose={() => setIsCommentSidebarOpen(false)}
                     />
                 )}
 

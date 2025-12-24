@@ -26,6 +26,7 @@ export interface Document {
     folderId: string | null;
     knowledgeBaseId?: string | null;
     teamId?: string | null;
+    metadata?: Record<string, unknown>;
     createdAt: string;
     updatedAt: string;
     [key: string]: unknown;  // Allow dynamic property access for sorting
@@ -40,6 +41,7 @@ export interface DocumentInput {
     folderId?: string | null;
     knowledgeBaseId?: string | null;
     teamId?: string | null;
+    metadata?: Record<string, unknown>;
 }
 
 // ============================================
@@ -57,6 +59,7 @@ export interface DocumentRow {
     folder_id: string | null;
     knowledge_base_id: string | null;
     team_id: string | null;
+    metadata?: Record<string, unknown>;
     created_at: string;
     updated_at: string;
 }

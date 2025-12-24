@@ -1,31 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, Shield, X, Check } from 'lucide-react';
-import * as mockStorage from '@/lib/services/mockStorage';
+import { Search, FileText, X, Check, Loader2 } from 'lucide-react';
+import * as documentService from '@/lib/services/api/documentService';
 
 export default function SourceSelector({ isOpen, onClose, onSelect, currentUser, excludeIds = [] }) {
-    const [activeTab, setActiveTab] = useState('project'); // 'project', 'system'
     const [searchTerm, setSearchTerm] = useState('');
     const [documents, setDocuments] = useState([]);
-    const [systemDocs, setSystemDocs] = useState([]);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (isOpen && currentUser) {
-            setDocuments(mockStorage.getAllDocuments(currentUser.uid));
-            setSystemDocs(mockStorage.getSystemKnowledge());
+            setLoading(true);
+            documentService.getAllDocuments(currentUser.uid)
+                .then(docs => setDocuments(docs))
+                .catch(err => {
+                    console.error('加载文档失败:', err);
+                    setDocuments([]);
+                })
+                .finally(() => setLoading(false));
         }
     }, [isOpen, currentUser]);
 
     if (!isOpen) return null;
 
-    const filterDocs = (docs) => {
-        return docs.filter(doc => {
-            const matchesSearch = doc.title.toLowerCase().includes(searchTerm.toLowerCase());
-            const notExcluded = !excludeIds.includes(doc.id);
-            return matchesSearch && notExcluded;
-        });
-    };
-
-    const displayDocs = activeTab === 'project' ? filterDocs(documents) : filterDocs(systemDocs);
+    const filteredDocs = documents.filter(doc => {
+        const matchesSearch = doc.title.toLowerCase().includes(searchTerm.toLowerCase());
+        const notExcluded = !excludeIds.includes(doc.id);
+        return matchesSearch && notExcluded;
+    });
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -37,19 +38,10 @@ export default function SourceSelector({ isOpen, onClose, onSelect, currentUser,
                     </button>
                 </div>
 
-                <div className="flex border-b border-gray-200">
-                    <button
-                        className={`flex-1 py-3 text-sm font-medium ${activeTab === 'project' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}
-                        onClick={() => setActiveTab('project')}
-                    >
-                        项目文档 ({filterDocs(documents).length})
-                    </button>
-                    <button
-                        className={`flex-1 py-3 text-sm font-medium ${activeTab === 'system' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}
-                        onClick={() => setActiveTab('system')}
-                    >
-                        系统知识库 ({filterDocs(systemDocs).length})
-                    </button>
+                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                    <span className="text-sm font-medium text-gray-600">
+                        我的文档 ({filteredDocs.length})
+                    </span>
                 </div>
 
                 <div className="p-4 border-b border-gray-200">
@@ -67,23 +59,30 @@ export default function SourceSelector({ isOpen, onClose, onSelect, currentUser,
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2">
-                    {displayDocs.length === 0 ? (
-                        <div className="text-center py-10 text-gray-400">未找到匹配文档</div>
+                    {loading ? (
+                        <div className="flex items-center justify-center py-10">
+                            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                            <span className="ml-2 text-gray-500">加载中...</span>
+                        </div>
+                    ) : filteredDocs.length === 0 ? (
+                        <div className="text-center py-10 text-gray-400">
+                            {searchTerm ? '未找到匹配文档' : '暂无文档'}
+                        </div>
                     ) : (
                         <div className="space-y-1">
-                            {displayDocs.map(doc => (
+                            {filteredDocs.map(doc => (
                                 <div
                                     key={doc.id}
                                     onClick={() => onSelect(doc)}
                                     className="flex items-center p-3 hover:bg-blue-50 cursor-pointer rounded-lg group transition"
                                 >
-                                    <div className={`p-2 rounded-lg mr-3 ${activeTab === 'system' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
-                                        {activeTab === 'system' ? <Shield size={20} /> : <FileText size={20} />}
+                                    <div className="p-2 rounded-lg mr-3 bg-blue-100 text-blue-600">
+                                        <FileText size={20} />
                                     </div>
                                     <div className="flex-1">
                                         <h4 className="font-medium text-gray-800">{doc.title}</h4>
                                         <p className="text-xs text-gray-500 line-clamp-1">
-                                            {doc.content ? doc.content.substring(0, 60) + '...' : '无内容'}
+                                            {doc.content ? doc.content.replace(/<[^>]*>/g, '').substring(0, 60) + '...' : '无内容'}
                                         </p>
                                     </div>
                                     <div className="opacity-0 group-hover:opacity-100 text-blue-600">
@@ -98,3 +97,4 @@ export default function SourceSelector({ isOpen, onClose, onSelect, currentUser,
         </div>
     );
 }
+

@@ -21,7 +21,7 @@ module.exports = {
         },
         {
             name: 'wdgl-collab',
-            script: './server.js',
+            script: './ws-server.js',
             cwd: '/var/www/wdgl-01/backend',
             instances: 1,
             autorestart: true,

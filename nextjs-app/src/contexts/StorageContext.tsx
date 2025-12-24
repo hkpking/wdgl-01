@@ -37,7 +37,7 @@ export const StorageProvider: React.FC<StorageProviderProps> = ({ children }) =>
         }
 
         // 超时保护：如果 5 秒内无法完成初始化，强制结束 loading 状态
-        let timeoutId = setTimeout(() => {
+        const timeoutId = setTimeout(() => {
             console.warn('[Auth] 初始化超时，强制结束 loading 状态');
             setLoading(false);
         }, 5000);

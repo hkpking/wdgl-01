@@ -13,7 +13,7 @@ import { useImageUpload } from '@/hooks/useImageUpload';
 
 // COLORS 已移至 shared/colors.js
 
-export default function DocToolbar({ editor, onAddComment }) {
+export default function DocToolbar({ editor, onAddComment, currentUser }) {
     const [showHeadingMenu, setShowHeadingMenu] = useState(false);
     const [showFontFamilyMenu, setShowFontFamilyMenu] = useState(false);
     const [showFontSizeMenu, setShowFontSizeMenu] = useState(false);
@@ -29,7 +29,7 @@ export default function DocToolbar({ editor, onAddComment }) {
     const [tableSize, setTableSize] = useState({ rows: 0, cols: 0 });
 
     // 使用共享的图片上传 Hook
-    const { fileInputRef, handleImageUpload, triggerUpload } = useImageUpload(editor);
+    const { fileInputRef, handleImageUpload, triggerUpload } = useImageUpload(editor, currentUser);
 
     const insertMenuRef = React.useRef(null);
     const headingMenuRef = React.useRef(null);

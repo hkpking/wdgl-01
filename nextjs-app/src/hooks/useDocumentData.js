@@ -23,13 +23,11 @@ export const useDocumentData = (id, currentUser, storageApi) => {
 
         // 如果正在加载中，不重复发起请求
         if (isLoadingRef.current) {
-            console.log('[LOAD] Already loading, skipping...');
             return;
         }
 
         // 如果已经成功加载过同一个文档，且不是强制刷新，则跳过
         if (!forceReload && loadedDocIdRef.current === id && document !== null) {
-            console.log('[LOAD] Document already loaded, skipping...');
             return;
         }
 
@@ -38,11 +36,9 @@ export const useDocumentData = (id, currentUser, storageApi) => {
         setError(null);
 
         try {
-            console.log('[LOAD] Loading document:', id);
             const doc = await storageApi.getDocument(currentUser.uid, id);
 
             if (doc) {
-                console.log('[LOAD] Document loaded successfully:', id);
 
                 let loadedContent = doc.content || '';
 
@@ -61,7 +57,6 @@ export const useDocumentData = (id, currentUser, storageApi) => {
                 });
             } else {
                 // 创建新文档
-                console.log('[LOAD] Creating new document:', id);
                 const newDoc = await storageApi.saveDocument(currentUser.uid, id, {
                     title: '',
                     content: '',

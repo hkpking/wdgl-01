@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants';
 import { uploadImage } from '@/lib/editor-utils';
-import * as mockStorage from '@/lib/services/mockStorage';
 import { useDocumentExport } from '@/hooks/useDocumentExport';
 import SettingsModal from './SettingsModal';
 
@@ -25,7 +24,8 @@ export default function DocHeader({
     onImport, // New prop for import handler
     onInsertBlock, // New prop for block insertion
     content, // New prop for export fallback
-    children // Accept children for custom buttons (like AI Assistant)
+    children, // Accept children for custom buttons (like AI Assistant)
+    currentUser // User object for image upload
 }) {
     const menus = ['文件', '编辑', '查看', '插入', '格式', '工具', '扩展程序', '帮助'];
     const [activeMenu, setActiveMenu] = useState(null);
@@ -38,7 +38,6 @@ export default function DocHeader({
     const menuRef = useRef(null);
     const fileInputRef = useRef(null);
     const wordInputRef = useRef(null); // Ref for Word file input
-    const currentUser = mockStorage.getCurrentUser();
 
     // Use custom hook for export
     const { exportAsPDF, exportAsMarkdown, exportAsWord } = useDocumentExport();
