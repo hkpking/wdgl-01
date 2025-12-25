@@ -7,6 +7,16 @@ const BYPASS_AUTH = process.env.NEXT_PUBLIC_BYPASS_AUTH === 'true'
 // 公开页面（无需登录即可访问）
 const PUBLIC_PATHS = ['/login', '/portal/login']
 
+// 旧路径到新路径的映射（兼容旧链接）
+const LEGACY_PATH_REDIRECTS: Record<string, string> = {
+    '/dashboard': '/wdgl/dashboard',
+    '/editor': '/wdgl/editor',
+    '/spreadsheet': '/wdgl/spreadsheet',
+    '/teams': '/wdgl/teams',
+    '/ask-ai': '/wdgl/ask-ai',
+    '/architecture': '/wdgl/architecture',
+}
+
 export async function middleware(request: NextRequest) {
     // 绕过模式下直接放行
     if (BYPASS_AUTH) {
@@ -14,9 +24,18 @@ export async function middleware(request: NextRequest) {
     }
 
     const pathname = request.nextUrl.pathname
+
+    // 处理旧路径重定向（兼容旧链接和书签）
+    for (const [oldPath, newPath] of Object.entries(LEGACY_PATH_REDIRECTS)) {
+        if (pathname === oldPath || pathname.startsWith(oldPath + '/')) {
+            const newUrl = new URL(request.url)
+            newUrl.pathname = pathname.replace(oldPath, newPath)
+            return NextResponse.redirect(newUrl, { status: 301 })
+        }
+    }
+
     const isPublicPage = PUBLIC_PATHS.some(path => pathname === path || pathname.startsWith(path + '/'))
     const isPortalLoginPage = pathname === '/portal/login'
-    const isMainLoginPage = pathname === '/login'
     const isPortalPage = pathname.startsWith('/portal') && !isPortalLoginPage
     const isWdglPage = pathname.startsWith('/wdgl')
 
@@ -68,5 +87,12 @@ export const config = {
         '/wdgl/:path*',
         '/portal/:path*',
         '/login',
+        // 旧路径（用于重定向）
+        '/dashboard/:path*',
+        '/editor/:path*',
+        '/spreadsheet/:path*',
+        '/teams/:path*',
+        '/ask-ai/:path*',
+        '/architecture/:path*',
     ],
 }
