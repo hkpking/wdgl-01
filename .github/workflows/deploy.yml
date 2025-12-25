@@ -1,124 +1,40 @@
 name: Deploy to Production
 
-on:
-  push:
-    branches: [main]
-    tags: ['v*']
+# 
+# ⚠️ 注意：此 workflow 已禁用自动部署
+# 
+# 推荐使用本地构建部署方式，避免生产服务器 CPU 过载：
+# bash scripts/deploy-local-build.sh
+#
+# 如需启用 GitHub Actions 自动部署，请：
+# 1. 取消下方 push 触发器的注释
+# 2. 确保 GitHub Secrets 已配置 ALIYUN_HOST 和 ALIYUN_SSH_KEY
+#
 
-env:
-  NODE_VERSION: '20'
+on:
+  # push:
+  #   branches: [main]
+  #   tags: ['v*']
+  workflow_dispatch:  # 保留手动触发选项
 
 jobs:
-  # 在 GitHub Actions runner 上构建
-  build:
+  notify:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./nextjs-app
-    
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: './nextjs-app/package-lock.json'
-      
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-      
-      - name: Build Next.js
-        run: npm run build
-        env:
-          # 生产环境变量
-          NEXT_PUBLIC_DRAWIO_URL: http://120.79.181.206:18080
-      
-      - name: Package build artifacts
+      - name: Deployment Notice
         run: |
-          # 打包构建产物和必要文件
-          tar -czf ../build.tar.gz \
-            .next \
-            public \
-            package.json \
-            package-lock.json \
-            next.config.ts \
-            ecosystem.config.cjs
-      
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextjs-build
-          path: build.tar.gz
-          retention-days: 1
-
-  # 部署构建产物到服务器
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: nextjs-build
-      
-      - name: Deploy to Aliyun Server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.ALIYUN_HOST }}
-          username: root
-          key: ${{ secrets.ALIYUN_SSH_KEY }}
-          port: 22
-          source: "build.tar.gz"
-          target: "/tmp"
-      
-      - name: Install and restart service
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.ALIYUN_HOST }}
-          username: root
-          key: ${{ secrets.ALIYUN_SSH_KEY }}
-          port: 22
-          script: |
-            set -e
-            echo "===== 开始部署 ====="
-            
-            APP_DIR="/var/www/wdgl-01/nextjs-app"
-            
-            # 备份当前版本
-            if [ -d "$APP_DIR/.next" ]; then
-              echo "[1/5] 备份当前版本..."
-              cp -r $APP_DIR/.next $APP_DIR/.next.bak 2>/dev/null || true
-            fi
-            
-            # 解压构建产物
-            echo "[2/5] 解压构建产物..."
-            cd $APP_DIR
-            tar -xzf /tmp/build.tar.gz --overwrite
-            rm /tmp/build.tar.gz
-            
-            # 安装生产依赖（不包含 devDependencies，速度快）
-            echo "[3/5] 安装生产依赖..."
-            npm ci --legacy-peer-deps --omit=dev
-            
-            # 重启 Next.js 服务
-            echo "[4/5] 重启 Next.js 服务..."
-            pm2 restart wdgl-nextjs || pm2 start ecosystem.config.cjs --only wdgl-nextjs
-            
-            # 清理备份
-            echo "[5/5] 清理..."
-            rm -rf $APP_DIR/.next.bak 2>/dev/null || true
-            
-            echo "===== 部署完成 ====="
-            pm2 list
-
-      - name: Notify Success
-        if: success()
-        run: echo "🚀 部署成功！"
-
-      - name: Notify Failure  
-        if: failure()
-        run: echo "❌ 部署失败，请检查日志"
+          echo "=========================================="
+          echo "⚠️  请使用本地构建部署方式"
+          echo "=========================================="
+          echo ""
+          echo "推荐部署方法（避免生产服务器 CPU 过载）："
+          echo ""
+          echo "  bash scripts/deploy-local-build.sh"
+          echo ""
+          echo "此脚本会："
+          echo "  1. 在开发机器上构建 Next.js"
+          echo "  2. 打包并传输构建产物到生产服务器"
+          echo "  3. 在生产服务器上解压并重启服务"
+          echo ""
+          echo "生产服务器 CPU 占用 < 10%"
+          echo "=========================================="
