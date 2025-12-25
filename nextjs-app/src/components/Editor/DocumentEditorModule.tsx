@@ -272,7 +272,7 @@ export default function DocumentEditorModule({
         if (onBack) {
             onBack();
         } else {
-            router.push('/dashboard');
+            router.push('/wdgl/dashboard');
         }
     }, [onBack, router]);
 

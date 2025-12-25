@@ -33,7 +33,7 @@ export const AUTH_CONFIG: AuthConfig = {
     useProxy,
     proxyUrl: SUPABASE_PROXY_URL,
     productId: 'docs', // 当前产品 ID
-    redirectUrl: '/dashboard',
+    redirectUrl: '/',
 };
 
 /**

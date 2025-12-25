@@ -180,7 +180,7 @@ export default function SpreadsheetEditorModule({
                 dataRef.current = data.data || [];
                 isInitializedRef.current = true;
             } else if (mode === 'standalone') {
-                router.push('/dashboard');
+                router.push('/wdgl/dashboard');
             }
         };
         loadSpreadsheet();
@@ -260,7 +260,7 @@ export default function SpreadsheetEditorModule({
         if (onBack) {
             onBack();
         } else {
-            router.push('/dashboard');
+            router.push('/wdgl/dashboard');
         }
     }, [onBack, router]);
 

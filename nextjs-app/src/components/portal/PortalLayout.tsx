@@ -42,7 +42,7 @@ export function PortalLayout({
     // 处理产品切换
     const handleProductChange = (productId: string) => {
         // 修正：切换产品时，默认进入该产品的 dashboard
-        const url = getProductUrl(productId, '/dashboard');
+        const url = getProductUrl(productId, '/wdgl/dashboard');
         router.push(url);
     };
 
@@ -55,7 +55,7 @@ export function PortalLayout({
     // 处理搜索
     const handleSearch = (query: string) => {
         console.log('搜索:', query);
-        router.push(`/dashboard?search=${encodeURIComponent(query)}`);
+        router.push(`/wdgl/dashboard?search=${encodeURIComponent(query)}`);
     };
 
     return (
@@ -98,7 +98,7 @@ export function AppCenter() {
     const products = getActiveProducts();
 
     const handleProductClick = (productId: string) => {
-        const url = getProductUrl(productId, '/dashboard');
+        const url = getProductUrl(productId, '/wdgl/dashboard');
         router.push(url);
     };
 

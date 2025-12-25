@@ -24,9 +24,9 @@ const MENU_ITEMS: MenuItem[] = [
         id: 'docs',
         title: '制度流程文档管理',
         icon: FileText,
-        path: '/dashboard',
-        isExternal: true,
-        ssoEnabled: false  // 同域，不需要 SSO
+        path: '/wdgl/dashboard',
+        isExternal: false,
+        ssoEnabled: false
     },
     {
         id: 'lctmr',

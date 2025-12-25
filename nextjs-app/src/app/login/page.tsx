@@ -20,7 +20,7 @@ export default function LoginPage() {
     // 如果已登录，跳转到 Dashboard
     useEffect(() => {
         if (!loading && currentUser) {
-            router.replace('/dashboard');
+            router.replace('/');
         }
     }, [currentUser, loading, router]);
 
@@ -37,7 +37,7 @@ export default function LoginPage() {
         try {
             const user = await signIn(email, password);
             // 使用 window.location 强制跳转
-            window.location.href = '/dashboard';
+            window.location.href = '/';
         } catch (err: any) {
             console.error('[Login] 登录失败:', err);
             // 处理 Supabase 错误信息
