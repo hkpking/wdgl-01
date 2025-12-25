@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { DiagramProvider } from "@/contexts/diagram-context";
 import { StorageProvider } from "@/contexts/StorageContext";
 import SWRProvider from "@/components/providers/SWRProvider";
@@ -8,15 +7,8 @@ import { PageErrorBoundary } from "@/components/providers/ErrorBoundary";
 
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// 使用系统字体栈，避免依赖 Google Fonts（阿里云服务器无法访问）
+const fontVariables = "font-sans";
 
 export const metadata: Metadata = {
   title: "WDGL 文档管理系统 - AI 驱动的智能制度管理",
@@ -32,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${fontVariables} antialiased`}
       >
         <PageErrorBoundary>
           <ReactQueryProvider>
