@@ -25,7 +25,7 @@ const MENU_ITEMS: MenuItem[] = [
         title: '制度流程文档管理',
         icon: FileText,
         path: '/wdgl/dashboard',
-        isExternal: false,
+        isExternal: true,  // 在新标签页打开
         ssoEnabled: false
     },
     {
