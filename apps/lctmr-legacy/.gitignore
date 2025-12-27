@@ -1,0 +1,48 @@
+# 环境配置文件
+.env
+.env.*
+.env.local
+.env.development.local
+.env.production.local
+env.development
+env.production
+env.*
+
+# 日志文件
+*.log
+logs/
+
+# 依赖目录
+node_modules/
+backend/node_modules/
+
+# 临时文件
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# 备份文件
+*.backup
+*.bak
+
+# 数据库文件
+*.db
+*.sqlite
+
+# 字体文件（已删除的大文件）
+assets/fonts/*.ttf
+assets/audio/*.mp3
+
+# 系统文件
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 构建输出
+dist/
+build/
+# 测试结果
+test-results/
+playwright-report/
