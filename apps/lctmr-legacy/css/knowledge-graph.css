@@ -1,0 +1,752 @@
+/**
+ * @file knowledge-graph.css
+ * @description 知识图谱可视化样式 - 类似流放之路2天赋盘
+ * @version 1.0.0
+ * @author LCTMR Team
+ */
+
+/* ==================== 主容器 ==================== */
+.knowledge-graph-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    display: flex;
+    flex-direction: column;
+}
+
+/* ==================== 顶部统计信息 ==================== */
+.graph-stats {
+    height: 60px;
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* ==================== 主要内容区域 ==================== */
+.graph-main-content {
+    flex: 1;
+    display: flex;
+    height: calc(100vh - 60px);
+}
+
+/* ==================== 组件面板 ==================== */
+.component-panel {
+    width: 200px;
+    background: white;
+    border-right: 1px solid #e2e8f0;
+    padding: 20px;
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+    z-index: 5;
+    overflow-y: auto;
+}
+
+.component-panel h3 {
+    margin: 0 0 15px 0;
+    color: #374151;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.component-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.component-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border: 2px dashed #d1d5db;
+    border-radius: 8px;
+    cursor: grab;
+    transition: all 0.2s ease;
+    background: #f9fafb;
+}
+
+.component-item:hover {
+    border-color: #3b82f6;
+    background: #eff6ff;
+    transform: translateY(-1px);
+}
+
+.component-item.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.component-icon {
+    font-size: 20px;
+    width: 24px;
+    text-align: center;
+}
+
+.component-item span {
+    font-size: 14px;
+    color: #374151;
+    font-weight: 500;
+}
+
+/* ==================== Canvas画布 ==================== */
+#knowledgeGraphCanvas {
+    display: block;
+    flex: 1;
+    height: 100%;
+    cursor: grab;
+}
+
+#knowledgeGraphCanvas:active {
+    cursor: grabbing;
+}
+
+/* ==================== 控制面板 ==================== */
+.graph-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.graph-btn {
+    width: 50px;
+    height: 50px;
+    border: none;
+    border-radius: 12px;
+    background: rgba(30, 41, 59, 0.9);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.graph-btn:hover {
+    background: rgba(51, 65, 85, 0.9);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.graph-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.graph-btn .icon {
+    font-style: normal;
+}
+
+.graph-btn.active {
+    background: rgba(245, 158, 11, 0.9);
+    color: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
+}
+
+/* 保存按钮默认隐藏 */
+#saveLayout {
+    display: none;
+}
+
+/* ==================== 节点详情面板 ==================== */
+.node-detail-panel {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%) translateX(-120%);
+    width: 320px;
+    max-height: 80vh;
+    background: rgba(30, 41, 59, 0.95);
+    backdrop-filter: blur(20px);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    z-index: 20;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+}
+
+.node-detail-panel.show {
+    transform: translateY(-50%) translateX(0);
+}
+
+.node-detail-panel h3 {
+    margin: 0 0 16px 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.3;
+}
+
+.node-detail-panel p {
+    margin: 0 0 20px 0;
+    font-size: 15px;
+    line-height: 1.6;
+    color: #cbd5e1;
+}
+
+.node-meta {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.node-meta span {
+    display: inline-block;
+    padding: 6px 12px;
+    background: rgba(59, 130, 246, 0.2);
+    border-radius: 8px;
+    font-size: 13px;
+    color: #93c5fd;
+    font-weight: 500;
+}
+
+.node-status {
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.node-status.completed {
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+    border: 2px solid rgba(16, 185, 129, 0.4);
+}
+
+.node-status.unlocked {
+    background: rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+    border: 2px solid rgba(59, 130, 246, 0.4);
+}
+
+.node-status.locked {
+    background: rgba(71, 85, 105, 0.2);
+    color: #94a3b8;
+    border: 2px solid rgba(71, 85, 105, 0.4);
+}
+
+.start-learning-btn {
+    width: 100%;
+    padding: 14px 20px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+.start-learning-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+.start-learning-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.start-learning-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #475569;
+    box-shadow: none;
+}
+
+/* ==================== 解锁通知 ==================== */
+.unlock-notification {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 20px 40px;
+    background: rgba(16, 185, 129, 0.95);
+    backdrop-filter: blur(20px);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(16, 185, 129, 0.5);
+    z-index: 1000;
+    animation: unlockPop 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes unlockPop {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+}
+
+.unlock-notification.fade-out {
+    animation: fadeOut 0.3s ease forwards;
+}
+
+@keyframes fadeOut {
+    to {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.8);
+    }
+}
+
+/* ==================== 滚动条样式 ==================== */
+.node-detail-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.node-detail-panel::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.node-detail-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.node-detail-panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+/* ==================== 响应式设计 ==================== */
+@media (max-width: 768px) {
+    .node-detail-panel {
+        left: 50%;
+        top: auto;
+        bottom: 0;
+        transform: translateX(-50%) translateY(120%);
+        width: calc(100% - 40px);
+        max-height: 60vh;
+    }
+
+    .node-detail-panel.show {
+        transform: translateX(-50%) translateY(0);
+    }
+
+    .graph-controls {
+        top: 10px;
+        right: 10px;
+        flex-direction: row;
+    }
+
+    .graph-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+}
+
+/* ==================== 加载动画 ==================== */
+.graph-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #fff;
+}
+
+.graph-loading-spinner {
+    width: 60px;
+    height: 60px;
+    border: 4px solid rgba(255, 255, 255, 0.2);
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.graph-loading-text {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+/* ==================== 统计面板 ==================== */
+.graph-stats {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(30, 41, 59, 0.9);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+.graph-stats-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: #cbd5e1;
+    font-size: 14px;
+}
+
+.graph-stats-item:last-child {
+    margin-bottom: 0;
+}
+
+.graph-stats-icon {
+    font-size: 18px;
+}
+
+.graph-stats-value {
+    font-weight: 700;
+    color: #fff;
+}
+
+/* ==================== 图例 ==================== */
+.graph-legend {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 16px;
+    background: rgba(30, 41, 59, 0.9);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 12px 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #cbd5e1;
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+}
+
+.legend-dot.start {
+    background: #10b981;
+}
+
+.legend-dot.major {
+    background: #f59e0b;
+}
+
+.legend-dot.test {
+    background: #8b5cf6;
+}
+
+.legend-dot.normal {
+    background: #3b82f6;
+}
+
+.legend-dot.locked {
+    background: #475569;
+}
+
+/* ==================== 动画效果 ==================== */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.node-unlocked {
+    animation: pulse 2s infinite;
+}
+
+/* ==================== 节点连接动画 ==================== */
+@keyframes flow {
+    0% {
+        stroke-dashoffset: 20;
+    }
+    100% {
+        stroke-dashoffset: 0;
+    }
+}
+
+/* ==================== 工具提示 ==================== */
+.graph-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.graph-tooltip.show {
+    opacity: 1;
+}
+
+/* ==================== 依赖信息 ==================== */
+.dependency-info {
+    margin: 16px 0;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.dependency-info h4 {
+    color: #cbd5e1;
+}
+
+.dependency-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dependency-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.dependency-item.completed {
+    background: rgba(16, 185, 129, 0.1);
+    color: #6ee7b7;
+}
+
+.dependency-item.pending {
+    background: rgba(71, 85, 105, 0.2);
+    color: #94a3b8;
+}
+
+.dep-status {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.dep-title {
+    flex: 1;
+}
+
+/* ==================== 路径高亮 ==================== */
+.path-highlight {
+    animation: pathPulse 2s infinite;
+}
+
+@keyframes pathPulse {
+    0%, 100% {
+        stroke-width: 2;
+        opacity: 0.5;
+    }
+    50% {
+        stroke-width: 4;
+        opacity: 1;
+    }
+}
+
+.node-with-multiple-paths {
+    position: relative;
+}
+
+.node-with-multiple-paths::after {
+    content: '⚡';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    font-size: 16px;
+    animation: sparkle 1.5s infinite;
+}
+
+@keyframes sparkle {
+    0%, 100% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.2);
+    }
+}
+
+/* ==================== 拖拽布局通知 ==================== */
+.graph-notification {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 1000;
+    animation: notificationSlideIn 0.3s ease-out;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.graph-notification.info {
+    background: rgba(59, 130, 246, 0.9);
+    color: #fff;
+}
+
+.graph-notification.success {
+    background: rgba(16, 185, 129, 0.9);
+    color: #fff;
+}
+
+.graph-notification.error {
+    background: rgba(239, 68, 68, 0.9);
+    color: #fff;
+}
+
+.graph-notification.fade-out {
+    animation: notificationSlideOut 0.3s ease-in forwards;
+}
+
+@keyframes notificationSlideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) translateY(0);
+    }
+}
+
+@keyframes notificationSlideOut {
+    from {
+        opacity: 1;
+        transform: translate(-50%, -50%) translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translate(-50%, -50%) translateY(-20px);
+    }
+}
+
+/* ==================== 编辑模式指示 ==================== */
+.edit-mode-indicator {
+    position: absolute;
+    top: 80px;
+    right: 20px;
+    background: rgba(245, 158, 11, 0.9);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    z-index: 10;
+    animation: pulse 2s infinite;
+}
+
+/* ==================== 拖拽辅助线 ==================== */
+.drag-guide {
+    position: absolute;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.drag-guide.horizontal {
+    width: 100%;
+    height: 1px;
+    background: rgba(245, 158, 11, 0.5);
+}
+
+.drag-guide.vertical {
+    width: 1px;
+    height: 100%;
+    background: rgba(245, 158, 11, 0.5);
+}
+
+/* ==================== 网格对齐指示 ==================== */
+.grid-snap-indicator {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: rgba(245, 158, 11, 0.8);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 5;
+    animation: gridSnapPulse 0.5s ease-out;
+}
+
+@keyframes gridSnapPulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+/* ==================== 进度环 ==================== */
+.progress-ring {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+}
+
+.progress-ring-circle {
+    transition: stroke-dashoffset 0.35s;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+}
+

@@ -1,0 +1,723 @@
+/**
+ * @file conversation-editor.css
+ * @description 对话内容编辑器样式
+ * @version 1.0.0
+ * @author LCTMR Team
+ */
+
+/* ==================== 编辑器主容器 ==================== */
+.conversation-editor-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #f8f9fa;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* ==================== 工具栏 ==================== */
+.editor-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.editor-title {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.toolbar-right {
+    display: flex;
+    gap: 12px;
+}
+
+/* 按钮样式 */
+.btn-secondary, .btn-primary, .btn-success, .btn-add {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-secondary {
+    background: #f8f9fa;
+    color: #6c757d;
+    border: 1px solid #dee2e6;
+}
+
+.btn-secondary:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #1e7e34;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+.btn-add {
+    background: #17a2b8;
+    color: white;
+    font-size: 12px;
+    padding: 6px 12px;
+}
+
+.btn-add:hover {
+    background: #117a8b;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.05);
+    transform: scale(1.1);
+}
+
+/* ==================== 主编辑区域 ==================== */
+.editor-main {
+    display: flex;
+    flex: 1;
+    gap: 16px;
+    padding: 16px;
+    overflow: hidden;
+}
+
+.editor-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+}
+
+.editor-right {
+    width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex-shrink: 0;
+}
+
+/* ==================== 卡片容器 ==================== */
+.section-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid #e9ecef;
+}
+
+.section-title {
+    margin: 0 0 16px 0;
+    color: #2c3e50;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.step-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.step-counter {
+    color: #6c757d;
+    font-size: 14px;
+}
+
+.step-counter strong {
+    color: #007bff;
+    font-weight: 600;
+}
+
+/* ==================== 表单组件 ==================== */
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    color: #495057;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.form-input, .form-textarea, .form-select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background: white;
+}
+
+.form-input:focus, .form-textarea:focus, .form-select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.form-group small {
+    display: block;
+    margin-top: 4px;
+    color: #6c757d;
+    font-size: 12px;
+}
+
+/* ==================== 对话步骤列表 ==================== */
+.conversation-steps {
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 8px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+}
+
+.empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-hint {
+    font-size: 13px;
+    opacity: 0.7;
+    margin-top: 8px;
+}
+
+/* ==================== 步骤项目 ==================== */
+.step-item {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: white;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.step-item:hover {
+    border-color: #007bff;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+}
+
+.step-item.active {
+    border-color: #007bff;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+    background: #f8f9ff;
+}
+
+.step-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    gap: 12px;
+}
+
+.step-number {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #e9ecef;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.step-item.active .step-number {
+    background: #007bff;
+    color: white;
+}
+
+.step-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    width: 32px;
+    text-align: center;
+}
+
+.step-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.step-title {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.step-summary {
+    color: #6c757d;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.step-meta {
+    color: #007bff;
+    font-size: 12px;
+    margin-top: 2px;
+    font-weight: 500;
+}
+
+.step-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.drag-handle {
+    color: #adb5bd;
+    cursor: grab;
+    padding: 4px;
+    font-weight: bold;
+    user-select: none;
+}
+
+.drag-handle:hover {
+    color: #6c757d;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+/* ==================== 步骤编辑器 ==================== */
+.step-editor {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.editor-header h5 {
+    margin: 0 0 16px 0;
+    color: #2c3e50;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.editor-actions {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #e9ecef;
+}
+
+.no-selection {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+}
+
+.no-selection-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+/* ==================== 选项编辑器 ==================== */
+.options-editor {
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 12px;
+    background: #f8f9fa;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.option-item:last-child {
+    margin-bottom: 0;
+}
+
+.option-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 80px;
+    font-size: 14px;
+    color: #495057;
+    cursor: pointer;
+}
+
+.option-label input[type="radio"] {
+    margin: 0;
+}
+
+.option-input {
+    flex: 1;
+}
+
+/* ==================== 图片预览 ==================== */
+.image-preview {
+    margin-top: 12px;
+}
+
+.image-preview img {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ==================== 预览区域 ==================== */
+.preview-container {
+    min-height: 200px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 16px;
+    background: #f8f9fa;
+}
+
+.preview-placeholder {
+    text-align: center;
+    color: #6c757d;
+    padding: 20px;
+}
+
+.preview-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.mini-preview h5 {
+    margin: 0 0 8px 0;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.preview-stats {
+    color: #6c757d;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ==================== 响应式设计 ==================== */
+@media (max-width: 1200px) {
+    .editor-right {
+        width: 350px;
+    }
+}
+
+@media (max-width: 992px) {
+    .editor-main {
+        flex-direction: column;
+    }
+    
+    .editor-right {
+        width: 100%;
+    }
+    
+    .toolbar-left, .toolbar-right {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .editor-title {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    .editor-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    
+    .toolbar-left, .toolbar-right {
+        justify-content: center;
+    }
+    
+    .editor-main {
+        padding: 12px;
+        gap: 12px;
+    }
+    
+    .section-card {
+        padding: 16px;
+    }
+    
+    .step-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .step-controls {
+        order: 3;
+        width: 100%;
+        justify-content: space-between;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #e9ecef;
+    }
+}
+
+@media (max-width: 576px) {
+    .step-controls {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .btn-add {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .step-counter {
+        text-align: center;
+        width: 100%;
+    }
+    
+    .form-input, .form-textarea {
+        font-size: 16px; /* 防止iOS缩放 */
+    }
+}
+
+/* ==================== 动画效果 ==================== */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.step-item {
+    animation: slideIn 0.2s ease-out;
+}
+
+.step-editor {
+    animation: slideIn 0.3s ease-out;
+}
+
+/* ==================== 滚动条样式 ==================== */
+.conversation-steps::-webkit-scrollbar,
+.step-editor::-webkit-scrollbar,
+.editor-left::-webkit-scrollbar {
+    width: 6px;
+}
+
+.conversation-steps::-webkit-scrollbar-track,
+.step-editor::-webkit-scrollbar-track,
+.editor-left::-webkit-scrollbar-track {
+    background: #f8f9fa;
+    border-radius: 3px;
+}
+
+.conversation-steps::-webkit-scrollbar-thumb,
+.step-editor::-webkit-scrollbar-thumb,
+.editor-left::-webkit-scrollbar-thumb {
+    background: #ced4da;
+    border-radius: 3px;
+}
+
+.conversation-steps::-webkit-scrollbar-thumb:hover,
+.step-editor::-webkit-scrollbar-thumb:hover,
+.editor-left::-webkit-scrollbar-thumb:hover {
+    background: #adb5bd;
+}
+
+/* ==================== 特殊状态 ==================== */
+.step-item[data-type="text"] .step-icon {
+    color: #007bff;
+}
+
+.step-item[data-type="image"] .step-icon {
+    color: #28a745;
+}
+
+.step-item[data-type="test"] .step-icon {
+    color: #ffc107;
+}
+
+.step-item.dragging {
+    opacity: 0.5;
+    transform: rotate(5deg);
+}
+
+.drag-over {
+    border-color: #007bff !important;
+    background: #f8f9ff !important;
+}
+
+/* ==================== 加载状态 ==================== */
+.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ==================== 错误状态 ==================== */
+.has-error .form-input,
+.has-error .form-textarea {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+}
+
+.error-message {
+    color: #dc3545;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* ==================== 成功状态 ==================== */
+.has-success .form-input,
+.has-success .form-textarea {
+    border-color: #28a745;
+    box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1);
+}
+
+.success-message {
+    color: #28a745;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* ==================== 打印样式 ==================== */
+@media print {
+    .editor-toolbar,
+    .step-controls,
+    .editor-actions {
+        display: none !important;
+    }
+    
+    .conversation-editor-wrapper {
+        box-shadow: none;
+        border: none;
+    }
+    
+    .step-item {
+        break-inside: avoid;
+    }
+}
+
+/* ==================== 高对比度模式 ==================== */
+@media (prefers-contrast: high) {
+    .conversation-editor-wrapper {
+        border: 2px solid #000;
+    }
+    
+    .step-item {
+        border-color: #000;
+    }
+    
+    .form-input, .form-textarea {
+        border-color: #000;
+    }
+    
+    .btn-primary, .btn-success, .btn-add {
+        border: 2px solid #000;
+    }
+}
+
+/* ==================== 减少动画模式 ==================== */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "lctmr-legacy-e2e",
+  "version": "1.0.0",
+  "description": "LCTMR Legacy E2E Test Suite",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:ui": "npx playwright test --ui",
+    "test:headed": "npx playwright test --headed",
+    "test:debug": "npx playwright test --debug",
+    "test:report": "npx playwright show-report",
+    "test:api": "./scripts/test-all-api.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

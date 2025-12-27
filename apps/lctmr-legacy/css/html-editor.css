@@ -1,0 +1,168 @@
+/* HTML编辑器样式 */
+.html-editor {
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.editor-toolbar {
+    background: #f9fafb;
+    border-bottom: 1px solid #d1d5db;
+    padding: 0.75rem;
+}
+
+.editor-toolbar .btn-group {
+    display: inline-flex;
+    border-radius: 0.375rem;
+    overflow: hidden;
+}
+
+.editor-toolbar .btn {
+    border: 1px solid #d1d5db;
+    background: white;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.editor-toolbar .btn:not(:first-child) {
+    border-left: none;
+}
+
+.editor-toolbar .btn:hover {
+    background: #f3f4f6;
+}
+
+.editor-toolbar .btn.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+
+.editor-content {
+    display: flex;
+    position: relative;
+}
+
+.editor-pane,
+.preview-pane {
+    flex: 1;
+    overflow: hidden;
+}
+
+.html-textarea {
+    width: 100%;
+    border: none;
+    outline: none;
+    padding: 1rem;
+    font-family: 'Courier New', Consolas, Monaco, monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    resize: none;
+    background: #fafafa;
+}
+
+.html-preview {
+    padding: 1rem;
+    background: white;
+    border-left: 1px solid #e5e7eb;
+    overflow-y: auto;
+}
+
+/* 预览区域内容样式 */
+.html-preview h1, .html-preview h2, .html-preview h3, 
+.html-preview h4, .html-preview h5, .html-preview h6 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+
+.html-preview h1 { font-size: 1.875rem; }
+.html-preview h2 { font-size: 1.5rem; }
+.html-preview h3 { font-size: 1.25rem; }
+.html-preview h4 { font-size: 1.125rem; }
+
+.html-preview p {
+    margin-bottom: 1rem;
+    line-height: 1.6;
+}
+
+.html-preview ul, .html-preview ol {
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+
+.html-preview li {
+    margin-bottom: 0.25rem;
+}
+
+.html-preview code {
+    background: #f1f5f9;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+}
+
+.html-preview pre {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+
+.html-preview blockquote {
+    border-left: 4px solid #e2e8f0;
+    padding-left: 1rem;
+    margin: 1rem 0;
+    font-style: italic;
+    color: #64748b;
+}
+
+/* 交互式内容样式 */
+.html-preview .interactive-content {
+    border: 2px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1rem 0;
+    background: #f8fafc;
+}
+
+.html-preview .quiz-container {
+    background: #fff7ed;
+    border: 2px solid #fed7aa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.html-preview .exercise-box {
+    background: #ecfdf5;
+    border: 2px solid #a7f3d0;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .editor-content {
+        flex-direction: column;
+    }
+    
+    .editor-toolbar .btn-group {
+        width: 100%;
+    }
+    
+    .editor-toolbar .btn {
+        flex: 1;
+        text-align: center;
+    }
+    
+    .html-preview {
+        border-left: none;
+        border-top: 1px solid #e5e7eb;
+    }
+}
